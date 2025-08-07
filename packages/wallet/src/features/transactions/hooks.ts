@@ -4,12 +4,10 @@ import { useEffect, useMemo, useState } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
 import { useEnabledChains } from 'uniswap/src/features/chains/hooks/useEnabledChains'
 import { UniverseChainId } from 'uniswap/src/features/chains/types'
+import { isL2ChainId } from 'uniswap/src/features/chains/utils'
 import { useCurrencyInfo } from 'uniswap/src/features/tokens/useCurrencyInfo'
-import {
-  makeSelectTransaction,
-  selectTransactions,
-  useSelectAddressTransactions,
-} from 'uniswap/src/features/transactions/selectors'
+import { useSelectTransaction } from 'uniswap/src/features/transactions/hooks/useSelectTransaction'
+import { selectTransactions, useSelectAddressTransactions } from 'uniswap/src/features/transactions/selectors'
 import { finalizeTransaction } from 'uniswap/src/features/transactions/slice'
 import { isBridge, isClassic, isUniswapX } from 'uniswap/src/features/transactions/swap/utils/routing'
 import {
@@ -18,9 +16,9 @@ import {
   TransactionStatus,
   TransactionType,
   UniswapXOrderDetails,
-  isFinalizedTx,
 } from 'uniswap/src/features/transactions/types/transactionDetails'
 import { TransactionState } from 'uniswap/src/features/transactions/types/transactionState'
+import { isFinalizedTx } from 'uniswap/src/features/transactions/types/utils'
 import { ensureLeading0x } from 'uniswap/src/utils/addresses'
 import { areCurrencyIdsEqual, buildCurrencyId } from 'uniswap/src/utils/currencyId'
 import { flattenObjectOfObjects } from 'utilities/src/primitives/objects'
@@ -30,7 +28,6 @@ import {
   createWrapFormFromTxDetails,
 } from 'wallet/src/features/transactions/swap/createSwapFormFromTxDetails'
 import { useActiveAccount, useActiveAccountAddressWithThrow } from 'wallet/src/features/wallet/hooks'
-import { WalletState } from 'wallet/src/state/walletReducer'
 
 type HashToTxMap = Map<string, TransactionDetails>
 
@@ -49,6 +46,9 @@ export function usePendingTransactions(
     )
   }, [ignoreTransactionTypes, transactions])
 }
+
+// For L2 chains, delay showing cancel option by 2 seconds
+const L2_CANCEL_DELAY_MS = 2 * ONE_SECOND_MS
 
 const ERRORED_QUEUE_STATUSES = [
   QueuedOrderStatus.AppClosed,
@@ -96,19 +96,6 @@ export function useSortedPendingTransactions(address: Address | null): Transacti
     }
     return transactions.sort((a: TransactionDetails, b: TransactionDetails) => a.addedTime - b.addedTime)
   }, [transactions])
-}
-
-export function useSelectTransaction({
-  address,
-  chainId,
-  txId,
-}: {
-  address?: Address
-  chainId?: UniverseChainId
-  txId?: string
-}): TransactionDetails | undefined {
-  const selectTransaction = useMemo(makeSelectTransaction, [])
-  return useSelector((state: WalletState) => selectTransaction(state, { address, chainId, txId }))
 }
 
 export function useCreateSwapFormState({
@@ -412,4 +399,31 @@ export function useSuccessfulSwapCompleted(onSwapCompleted: (transaction: Transa
       }
     }
   }, [successfulSwapTransactions, lastProcessedTimestamp, onSwapCompleted])
+}
+
+export function useIsCancelable(tx: TransactionDetails): boolean {
+  const shouldDelayCancel = isL2ChainId(tx.chainId)
+  const [hasDelayPassed, setHasDelayPassed] = useState(
+    shouldDelayCancel ? Date.now() - tx.addedTime > L2_CANCEL_DELAY_MS : true,
+  )
+
+  // Force re-render when delay has passed for L2 chains
+  useEffect(() => {
+    if (shouldDelayCancel && !hasDelayPassed) {
+      const timeRemaining = L2_CANCEL_DELAY_MS - (Date.now() - tx.addedTime)
+      if (timeRemaining > 0) {
+        const timeout = setTimeout(() => {
+          setHasDelayPassed(true)
+        }, timeRemaining)
+        return () => clearTimeout(timeout)
+      }
+    }
+    return undefined
+  }, [shouldDelayCancel, hasDelayPassed, tx.addedTime])
+
+  const isSentBridge = isBridge(tx) && tx.sendConfirmed
+  const isPending = tx.status === TransactionStatus.Pending
+  const wasSubmitted = isUniswapX(tx) || Object.keys(tx.options.request).length > 0
+
+  return !isSentBridge && isPending && wasSubmitted && hasDelayPassed
 }

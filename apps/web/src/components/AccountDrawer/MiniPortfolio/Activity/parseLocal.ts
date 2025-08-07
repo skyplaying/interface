@@ -22,35 +22,37 @@ import { isOnChainOrder, useAllSignatures } from 'state/signatures/hooks'
 import type { SignatureDetails } from 'state/signatures/types'
 import { SignatureType } from 'state/signatures/types'
 import { useMultichainTransactions } from 'state/transactions/hooks'
-import type { LpIncentivesClaimTransactionInfo, TransactionDetails } from 'state/transactions/types'
 import { isConfirmedTx } from 'state/transactions/utils'
 import { nativeOnChain } from 'uniswap/src/constants/tokens'
 import { useEnabledChains } from 'uniswap/src/features/chains/hooks/useEnabledChains'
 import { UniverseChainId } from 'uniswap/src/features/chains/types'
 import type { FORTransaction } from 'uniswap/src/features/fiatOnRamp/types'
 import { useLocalizationContext } from 'uniswap/src/features/language/LocalizationContext'
+import { FLASHBLOCKS_INSTANT_BALANCE_TIMEOUT } from 'uniswap/src/features/transactions/swap/components/UnichainInstantBalanceModal/constants'
 import type {
   ApproveTransactionInfo,
   BridgeTransactionInfo,
   CollectFeesTransactionInfo,
+  ConfirmedSwapTransactionInfo,
   ExactInputSwapTransactionInfo,
   ExactOutputSwapTransactionInfo,
+  InterfaceTransactionDetails,
   LiquidityDecreaseTransactionInfo,
   LiquidityIncreaseTransactionInfo,
+  LpIncentivesClaimTransactionInfo,
   MigrateV2LiquidityToV3TransactionInfo,
   SendTokenTransactionInfo,
   WrapTransactionInfo,
 } from 'uniswap/src/features/transactions/types/transactionDetails'
-import {
-  TransactionStatus,
-  TransactionType as UniswapTransactionType,
-} from 'uniswap/src/features/transactions/types/transactionDetails'
+import { TransactionStatus, TransactionType } from 'uniswap/src/features/transactions/types/transactionDetails'
+import { isConfirmedSwapTypeInfo } from 'uniswap/src/features/transactions/types/utils'
 import i18n from 'uniswap/src/i18n'
 import { buildCurrencyId, currencyIdToChain } from 'uniswap/src/utils/currencyId'
 import { isAddress } from 'utilities/src/addresses'
 import { NumberType } from 'utilities/src/format/types'
 import { logger } from 'utilities/src/logger/logger'
 import { ReactQueryCacheKey } from 'utilities/src/reactQuery/cache'
+import { ONE_SECOND_MS } from 'utilities/src/time/time'
 
 type FormatNumberFunctionType = ReturnType<typeof useLocalizationContext>['formatNumberOrString']
 type FormatFiatPriceFunctionType = ReturnType<typeof useLocalizationContext>['convertFiatAmountFormatted']
@@ -129,6 +131,36 @@ async function parseSwap({
   }
 }
 
+async function parseConfirmedSwap({
+  swap,
+  formatNumber,
+}: {
+  swap: ConfirmedSwapTransactionInfo
+  formatNumber: FormatNumberFunctionType
+}): Promise<Partial<Activity>> {
+  const [tokenIn, tokenOut] = await Promise.all([
+    getCurrencyFromCurrencyId(swap.inputCurrencyId),
+    getCurrencyFromCurrencyId(swap.outputCurrencyId),
+  ])
+
+  // For confirmed swaps, we use the actual settled amounts
+  const inputRaw = swap.inputCurrencyAmountRaw
+  const outputRaw = swap.outputCurrencyAmountRaw
+
+  return {
+    descriptor: buildCurrencyDescriptor({
+      currencyA: tokenIn,
+      amtA: inputRaw,
+      currencyB: tokenOut,
+      amtB: outputRaw,
+      formatNumber,
+      isSwap: true,
+    }),
+    currencies: [tokenIn, tokenOut],
+    prefixIconSrc: swap.isUniswapXOrder ? UniswapXBolt : undefined,
+  }
+}
+
 async function parseBridge({
   bridge,
   formatNumber,
@@ -187,7 +219,7 @@ function parseWrap({
     isSwap: true,
   })
   const title = getActivityTitle({
-    type: UniswapTransactionType.Wrap,
+    type: TransactionType.Wrap,
     status,
     alternate: wrap.unwrapped,
   })
@@ -209,7 +241,7 @@ async function parseApproval({
   const descriptor = currency?.symbol ?? currency?.name ?? i18n.t('common.unknown')
   return {
     title: getActivityTitle({
-      type: UniswapTransactionType.Approve,
+      type: TransactionType.Approve,
       status,
       alternate: BigNumber.from(approval.approvalAmount).eq(0), // use alternate if it's a revoke
     }),
@@ -349,48 +381,76 @@ async function parseLpIncentivesClaim({
 
 export async function transactionToActivity({
   details,
-  chainId,
   formatNumber,
 }: {
-  details?: TransactionDetails
-  chainId: UniverseChainId
+  details?: InterfaceTransactionDetails
   formatNumber: FormatNumberFunctionType
 }): Promise<Activity | undefined> {
   if (!details) {
     return undefined
   }
+  const { chainId } = details
   try {
     const defaultFields = {
       hash: details.hash,
       chainId,
       nonce: details.nonce,
-      title: getActivityTitle({ type: details.info.type, status: details.status }),
+      title: getActivityTitle({ type: details.typeInfo.type, status: details.status }),
       status: details.status,
       timestamp: (isConfirmedTx(details) ? details.confirmedTime : details.addedTime) / 1000,
       from: details.from,
       cancelled: details.cancelled,
     }
 
+    // Override title for successful Unichain swaps
+    const isUnichainNetwork = chainId === UniverseChainId.Unichain || chainId === UniverseChainId.UnichainSepolia
+    const confirmTimeSeconds = isConfirmedTx(details) ? (details.confirmedTime - details.addedTime) / 1000 : undefined
+    if (
+      details.typeInfo.type === TransactionType.Swap &&
+      details.status === TransactionStatus.Success &&
+      isUnichainNetwork &&
+      confirmTimeSeconds !== undefined
+    ) {
+      // Calculate actual confirm time from transaction details
+
+      // Round to nearest 0.1
+      const roundedConfirmTime = Math.round(confirmTimeSeconds * 10) / 10
+
+      if (roundedConfirmTime * ONE_SECOND_MS < FLASHBLOCKS_INSTANT_BALANCE_TIMEOUT) {
+        defaultFields.title = i18n.t('swap.details.swappedIn', {
+          time: roundedConfirmTime,
+        })
+      }
+    }
+
     let additionalFields: Partial<Activity> = {}
-    const info = details.info
-    if (info.type === UniswapTransactionType.Swap) {
-      additionalFields = await parseSwap({
-        swap: info,
-        formatNumber,
-      })
-    } else if (info.type === UniswapTransactionType.Bridge) {
+    const info = details.typeInfo
+    if (info.type === TransactionType.Swap) {
+      const confirmedSwap = isConfirmedSwapTypeInfo(info)
+      if (!confirmedSwap) {
+        additionalFields = await parseSwap({
+          swap: info,
+          formatNumber,
+        })
+      } else {
+        additionalFields = await parseConfirmedSwap({
+          swap: info,
+          formatNumber,
+        })
+      }
+    } else if (info.type === TransactionType.Bridge) {
       additionalFields = await parseBridge({
         bridge: info,
         formatNumber,
         chainId,
       })
-    } else if (info.type === UniswapTransactionType.Approve) {
+    } else if (info.type === TransactionType.Approve) {
       additionalFields = await parseApproval({
         approval: info,
         chainId,
         status: details.status,
       })
-    } else if (info.type === UniswapTransactionType.Wrap) {
+    } else if (info.type === TransactionType.Wrap) {
       additionalFields = parseWrap({
         wrap: info,
         chainId,
@@ -398,35 +458,35 @@ export async function transactionToActivity({
         formatNumber,
       })
     } else if (
-      info.type === UniswapTransactionType.LiquidityIncrease ||
-      info.type === UniswapTransactionType.LiquidityDecrease ||
-      info.type === UniswapTransactionType.CreatePool ||
-      info.type === UniswapTransactionType.CreatePair ||
-      info.type === UniswapTransactionType.MigrateLiquidityV3ToV4
+      info.type === TransactionType.LiquidityIncrease ||
+      info.type === TransactionType.LiquidityDecrease ||
+      info.type === TransactionType.CreatePool ||
+      info.type === TransactionType.CreatePair ||
+      info.type === TransactionType.MigrateLiquidityV3ToV4
     ) {
       additionalFields = await parseLiquidity({
         lp: info,
         formatNumber,
       })
-    } else if (info.type === UniswapTransactionType.CollectFees) {
+    } else if (info.type === TransactionType.CollectFees) {
       additionalFields = await parseCollectFees({
         collectInfo: info,
         formatNumber,
       })
-    } else if (info.type === UniswapTransactionType.MigrateLiquidityV2ToV3) {
+    } else if (info.type === TransactionType.MigrateLiquidityV2ToV3) {
       additionalFields = await parseMigrateV2ToV3(info)
-    } else if (info.type === UniswapTransactionType.Send) {
+    } else if (info.type === TransactionType.Send) {
       additionalFields = await parseSend({
         send: info,
         formatNumber,
         chainId,
       })
-    } else if (info.type === UniswapTransactionType.LPIncentivesClaimRewards) {
+    } else if (info.type === TransactionType.LPIncentivesClaimRewards) {
       additionalFields = await parseLpIncentivesClaim({
         info,
         chainId,
       })
-    } else if (info.type === UniswapTransactionType.Permit2Approve) {
+    } else if (info.type === TransactionType.Permit2Approve) {
       additionalFields = {
         title: i18n.t('common.permit'),
         descriptor: i18n.t('notification.transaction.unknown.success.short'),
@@ -438,7 +498,7 @@ export async function transactionToActivity({
 
     const CancelledTransactionTitleTable = getCancelledTransactionTitleTable()
     if (details.cancelled) {
-      activity.title = CancelledTransactionTitleTable[details.info.type]
+      activity.title = CancelledTransactionTitleTable[details.typeInfo.type]
       activity.status = TransactionStatus.Success
     }
 
@@ -451,16 +511,14 @@ export async function transactionToActivity({
 
 export function getTransactionToActivityQueryOptions({
   transaction,
-  chainId,
   formatNumber,
 }: {
-  transaction?: TransactionDetails
-  chainId: UniverseChainId
+  transaction?: InterfaceTransactionDetails
   formatNumber: FormatNumberFunctionType
 }) {
   return queryOptions({
-    queryKey: [ReactQueryCacheKey.TransactionToActivity, transaction, chainId],
-    queryFn: async () => transactionToActivity({ details: transaction, chainId, formatNumber }),
+    queryKey: [ReactQueryCacheKey.TransactionToActivity, transaction],
+    queryFn: async () => transactionToActivity({ details: transaction, formatNumber }),
   })
 }
 
@@ -595,7 +653,7 @@ export async function signatureToActivity(
 }
 
 export function useLocalActivities(account: string): ActivityMap {
-  const allTransactions = useMultichainTransactions()
+  const allTransactions = useMultichainTransactions(account)
   const allSignatures = useAllSignatures()
   const { formatNumberOrString } = useLocalizationContext()
   const { chains } = useEnabledChains()
@@ -604,10 +662,12 @@ export function useLocalActivities(account: string): ActivityMap {
     queryKey: [ReactQueryCacheKey.LocalActivities, account, allTransactions, allSignatures],
     queryFn: async () => {
       const transactions = Object.values(allTransactions)
-        .filter(([transaction]) => transaction.from === account)
         .filter(([, chainId]) => chains.includes(chainId))
-        .map(([transaction, chainId]) =>
-          transactionToActivity({ details: transaction, chainId, formatNumber: formatNumberOrString }),
+        .map(([transaction]) =>
+          transactionToActivity({
+            details: transaction,
+            formatNumber: formatNumberOrString,
+          }),
         )
       const signatures = Object.values(allSignatures)
         .filter((signature) => signature.offerer === account)

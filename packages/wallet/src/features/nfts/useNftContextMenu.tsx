@@ -55,7 +55,7 @@ export function useNFTContextMenu({
   const account = useActiveAccountWithThrow()
   const isViewOnlyWallet = account.type === AccountType.Readonly
 
-  const { handleShareNft, navigateToNftDetails } = useWalletNavigation()
+  const { navigateToNftDetails } = useWalletNavigation()
 
   const accounts = useAccounts()
   const isLocalAccount = owner && !!accounts[owner]
@@ -63,13 +63,6 @@ export function useNFTContextMenu({
   const nftVisibility = useSelector(selectNftsVisibility)
   const nftKey = contractAddress && tokenId ? getNFTAssetKey(contractAddress, tokenId) : undefined
   const isVisible = !getIsNftHidden({ contractAddress, tokenId, isSpam, nftVisibility })
-
-  const onPressShare = useCallback(async (): Promise<void> => {
-    if (!contractAddress || !tokenId) {
-      return
-    }
-    handleShareNft({ contractAddress, tokenId })
-  }, [contractAddress, handleShareNft, tokenId])
 
   const onPressReport = useCallback(async () => {
     if (!nftKey || !chainId || !contractAddress) {
@@ -102,6 +95,14 @@ export function useNFTContextMenu({
       logger.error(e, {
         tags: { file: 'useNftContextMenu.tsx', function: 'onPressReport' },
       })
+
+      // Don't surface this error to the user if the chain ID isn't supported
+      const error = e as { data?: { message?: string } }
+      const unsupportedChainError = error.data?.message?.includes('Unsupported chain ID')
+
+      if (unsupportedChainError) {
+        return
+      }
 
       dispatch(
         pushNotification({
@@ -202,15 +203,6 @@ export function useNFTContextMenu({
                   },
                 ]
               : []),
-            ...(!isWeb
-              ? [
-                  {
-                    title: t('common.button.share'),
-                    systemIcon: 'square.and.arrow.up',
-                    onPress: onPressShare,
-                  },
-                ]
-              : []),
             ...(isSelfReportSpamNFTEnabled && !isViewOnlyWallet && !isSpam
               ? [
                   {
@@ -254,7 +246,6 @@ export function useNFTContextMenu({
       openExplorerLink,
       contractAddress,
       onPressCopyAddress,
-      onPressShare,
       isSelfReportSpamNFTEnabled,
       isViewOnlyWallet,
       isSpam,

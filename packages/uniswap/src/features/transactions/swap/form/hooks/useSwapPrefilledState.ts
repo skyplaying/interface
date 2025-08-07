@@ -37,8 +37,13 @@ export function useSwapPrefilledState(initialState: TransactionState | undefined
       txId: initialState.txId,
       isFiatMode: false,
       isSubmitting: false,
+      isConfirmed: false,
       isMax: false,
       showPendingUI: false,
+      instantReceiptFetchTime: undefined,
+      instantOutputAmountRaw: undefined,
+      txHash: undefined,
+      txHashReceivedTime: undefined,
     }
   }, [initialState])
 
@@ -94,7 +99,12 @@ export function getSwapPrefilledState({
     type: AssetType.Currency,
   }
 
-  const opposedToken = areAddressesEqual(nativeTokenAddress, currencyAddress) ? null : nativeToken
+  const opposedToken = areAddressesEqual({
+    addressInput1: { address: nativeTokenAddress, chainId: currencyChainId },
+    addressInput2: { address: currencyAddress, chainId: currencyChainId },
+  })
+    ? null
+    : nativeToken
 
   const swapFormState: TransactionState = {
     exactCurrencyField: currencyField,
