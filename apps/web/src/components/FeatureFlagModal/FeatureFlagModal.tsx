@@ -170,6 +170,7 @@ export default function FeatureFlagModal() {
         <Flex maxHeight="600px" pb="$gap8" overflow="scroll" $md={{ maxHeight: 'unset' }}>
           <FeatureFlagGroup name="Solana">
             <FeatureFlagOption flag={FeatureFlags.Solana} label="Enable Solana UX" />
+            <FeatureFlagOption flag={FeatureFlags.SolanaPromo} label="Turn on Solana promo banners" />
           </FeatureFlagGroup>
           <FeatureFlagGroup name="Swap Refactor">
             <FeatureFlagOption
@@ -179,11 +180,16 @@ export default function FeatureFlagModal() {
           </FeatureFlagGroup>
           <FeatureFlagGroup name="Swap Features">
             <FeatureFlagOption flag={FeatureFlags.BatchedSwaps} label="Enable Batched Swaps" />
+            <FeatureFlagOption flag={FeatureFlags.UnichainFlashblocks} label="Enable Unichain Flashblocks" />
             <FeatureFlagOption flag={FeatureFlags.UniquoteEnabled} label="Enable Uniquote" />
             <FeatureFlagOption flag={FeatureFlags.ViemProviderEnabled} label="Enable Viem Provider" />
             <FeatureFlagOption flag={FeatureFlags.InstantTokenBalanceUpdate} label="Instant token balance update" />
             <FeatureFlagOption flag={FeatureFlags.LimitsFees} label="Enable Limits fees" />
             <FeatureFlagOption flag={FeatureFlags.EnablePermitMismatchUX} label="Enable Permit2 mismatch detection" />
+            <FeatureFlagOption
+              flag={FeatureFlags.TradingApiSwapConfirmation}
+              label="Enable Trading API Swap Confirmation"
+            />
             <FeatureFlagOption
               flag={FeatureFlags.ForcePermitTransactions}
               label="Force Permit2 transaction instead of signatures, always"
@@ -206,8 +212,8 @@ export default function FeatureFlagModal() {
             <FeatureFlagOption flag={FeatureFlags.ArbitrumDutchV3} label="Enable Dutch V3 on Arbitrum" />
           </FeatureFlagGroup>
           <FeatureFlagGroup name="LP">
-            <FeatureFlagOption flag={FeatureFlags.CreateLiquidityRefactor} label="Enable Create Liquidity Refactor" />
             <FeatureFlagOption flag={FeatureFlags.LpIncentives} label="Enable LP Incentives" />
+            <FeatureFlagOption flag={FeatureFlags.MigrateV2} label="Enable new Migrate V2 flow" />
           </FeatureFlagGroup>
           <FeatureFlagGroup name="FOR">
             <FeatureFlagOption flag={FeatureFlags.FiatOffRamp} label="Enable Fiat OffRamp" />
@@ -228,6 +234,18 @@ export default function FeatureFlagModal() {
             <FeatureFlagOption
               flag={FeatureFlags.PoolSearch}
               label="Enable pool search (turn on search_revamp as well to see)"
+            />
+          </FeatureFlagGroup>
+          <FeatureFlagGroup name="Mini Portfolio">
+            <FeatureFlagOption flag={FeatureFlags.GqlToRestBalances} label="Rest Token Balances" />
+            <FeatureFlagOption
+              flag={FeatureFlags.SharedPortfolioUI}
+              label="Enable new mini portfolio UI shared across platforms"
+            />
+            <FeatureFlagOption flag={FeatureFlags.SelfReportSpamNFTs} label="Report spam NFTs" />
+            <FeatureFlagOption
+              flag={FeatureFlags.DisableExtensionDeeplinks}
+              label="Disable extension deeplinks for testing mini portfolio UI on web"
             />
           </FeatureFlagGroup>
           <FeatureFlagGroup name="New Chains">

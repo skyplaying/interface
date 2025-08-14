@@ -1,6 +1,8 @@
 import { tamaguiPlugin } from '@tamagui/vite-plugin'
 import react from '@vitejs/plugin-react'
+import reactOxc from '@vitejs/plugin-react-oxc'
 import { execSync } from 'child_process'
+import fs from 'fs'
 import path from 'path'
 import process from 'process'
 import { fileURLToPath } from 'url'
@@ -19,6 +21,15 @@ const ENABLE_REACT_COMPILER = process.env.ENABLE_REACT_COMPILER === 'true'
 const ReactCompilerConfig = {
   target: '18', // '17' | '18' | '19'
 }
+
+const reactPlugin = () =>
+  ENABLE_REACT_COMPILER
+    ? react({
+        babel: {
+          plugins: [['babel-plugin-react-compiler', ReactCompilerConfig]],
+        },
+      })
+    : reactOxc()
 
 // Get git commit hash
 const commitHash = execSync('git rev-parse HEAD').toString().trim()
@@ -86,15 +97,7 @@ export default defineConfig(({ mode }) => {
     },
 
     plugins: [
-      react(
-        ENABLE_REACT_COMPILER
-          ? {
-              babel: {
-                plugins: [['babel-plugin-react-compiler', ReactCompilerConfig]],
-              },
-            }
-          : undefined,
-      ),
+      reactPlugin(),
       isProduction
         ? tamaguiPlugin({
             config: '../../packages/ui/src/tamagui.config.ts',
@@ -169,6 +172,28 @@ export default defineConfig(({ mode }) => {
               { name: '**/*', limit: Infinity, mode: 'uncompressed' },
             ],
           }),
+      {
+        name: 'copy-twit-config',
+        writeBundle() {
+          const configMode = isProduction ? 'production' : 'staging'
+          const sourceFile = path.resolve(__dirname, `twit-configs/twit.${configMode}.json`)
+          const targetFile = path.resolve(__dirname, `build/.well-known/twit.json`)
+
+          if (fs.existsSync(sourceFile)) {
+            // Ensure the .well-known directory exists in build output
+            const targetDir = path.dirname(targetFile)
+            if (!fs.existsSync(targetDir)) {
+              fs.mkdirSync(targetDir, { recursive: true })
+            }
+
+            // Copy the file directly to the build output
+            fs.copyFileSync(sourceFile, targetFile)
+            console.log(`Copied ${configMode} TWIT config to build output for env ${mode}`)
+          } else {
+            console.warn(`${configMode} TWIT config not found for env ${mode}`)
+          }
+        },
+      },
     ].filter(Boolean as unknown as <T>(x: T) => x is NonNullable<T>),
 
     optimizeDeps: {
@@ -202,6 +227,10 @@ export default defineConfig(({ mode }) => {
           '.tsx': 'tsx',
         },
       },
+    },
+
+    server: {
+      port: 3000,
     },
 
     build: {

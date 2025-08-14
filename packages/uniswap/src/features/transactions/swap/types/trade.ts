@@ -17,12 +17,14 @@ import {
   QuoteResponse,
   Routing,
 } from 'uniswap/src/data/tradingApi/__generated__/index'
-import { AccountMeta } from 'uniswap/src/features/accounts/types'
 import { getCurrencyAmount, ValueType } from 'uniswap/src/features/tokens/getCurrencyAmount'
 import { FrontendSupportedProtocol } from 'uniswap/src/features/transactions/swap/utils/protocols'
 import { MAX_AUTO_SLIPPAGE_TOLERANCE } from 'uniswap/src/constants/transactions'
 import { getSwapFee } from 'uniswap/src/features/transactions/swap/types/getSwapFee'
 import { GasEstimate } from 'uniswap/src/data/tradingApi/types'
+import { AccountDetails } from 'uniswap/src/features/wallet/types/AccountDetails'
+import { SolanaTrade } from 'uniswap/src/features/transactions/swap/types/solana'
+import { slippageToleranceToPercent } from 'uniswap/src/features/transactions/swap/utils/format'
 
 type QuoteResponseWithAggregatedOutputs = ClassicQuoteResponse | DutchQuoteResponse | DutchV3QuoteResponse | PriorityQuoteResponse
 
@@ -85,6 +87,9 @@ export class UniswapXV2Trade extends V2DutchOrderTrade<Currency, Currency, Trade
   readonly swapFee?: SwapFee
   readonly indicative = false
 
+  readonly maxAmountIn: CurrencyAmount<Currency>
+  readonly minAmountOut: CurrencyAmount<Currency>
+
   constructor({
     quote,
     currencyIn,
@@ -101,6 +106,21 @@ export class UniswapXV2Trade extends V2DutchOrderTrade<Currency, Currency, Trade
     this.quote = quote
     this.slippageTolerance = this.quote.quote.slippageTolerance ?? 0
     this.swapFee = getSwapFee(quote)
+
+
+    // TODO(SWAP-235): Cleanup redundancy
+    this.maxAmountIn = this.maximumAmountIn()
+    this.minAmountOut = this.minimumAmountOut()
+  }
+
+  /** @deprecated see trade.maxAmountIn */
+  public maximumAmountIn(): CurrencyAmount<Currency> {
+    return super.maximumAmountIn()
+  }
+
+  /** @deprecated see trade.minAmountOut */
+  public minimumAmountOut(): CurrencyAmount<Currency> {
+    return super.minimumAmountOut()
   }
 
   public get deadline(): number {
@@ -135,6 +155,9 @@ export class UniswapXV3Trade extends V3DutchOrderTrade<Currency, Currency, Trade
   readonly swapFee?: SwapFee
   readonly indicative = false
 
+  readonly maxAmountIn: CurrencyAmount<Currency>
+  readonly minAmountOut: CurrencyAmount<Currency>
+
   constructor({
     quote,
     currencyIn,
@@ -155,6 +178,20 @@ export class UniswapXV3Trade extends V3DutchOrderTrade<Currency, Currency, Trade
     this.quote = quote
     this.slippageTolerance = this.quote.quote.slippageTolerance ?? 0
     this.swapFee = getSwapFee(quote)
+
+    // TODO(SWAP-235): Cleanup redundancy
+    this.maxAmountIn = this.maximumAmountIn()
+    this.minAmountOut = this.minimumAmountOut()
+  }
+
+  /** @deprecated see trade.maxAmountIn */
+  public maximumAmountIn(): CurrencyAmount<Currency> {
+    return super.maximumAmountIn()
+  }
+
+  /** @deprecated see trade.minAmountOut */
+  public minimumAmountOut(): CurrencyAmount<Currency> {
+    return super.minimumAmountOut()
   }
 
   public get deadline(): number {
@@ -189,6 +226,9 @@ export class PriorityOrderTrade extends IPriorityOrderTrade<Currency, Currency, 
   readonly swapFee?: SwapFee
   readonly indicative = false
 
+  readonly maxAmountIn: CurrencyAmount<Currency>
+  readonly minAmountOut: CurrencyAmount<Currency>
+
   constructor({
     quote,
     currencyIn,
@@ -209,6 +249,20 @@ export class PriorityOrderTrade extends IPriorityOrderTrade<Currency, Currency, 
     this.quote = quote
     this.slippageTolerance = this.quote.quote.slippageTolerance ?? 0
     this.swapFee = getSwapFee(quote)
+
+    // TODO(SWAP-235): Cleanup redundancy
+    this.maxAmountIn = this.maximumAmountIn()
+    this.minAmountOut = this.minimumAmountOut()
+  }
+
+  /** @deprecated see trade.maxAmountIn */
+  public maximumAmountIn(): CurrencyAmount<Currency> {
+    return super.maximumAmountIn()
+  }
+
+  /** @deprecated see trade.minAmountOut */
+  public minimumAmountOut(): CurrencyAmount<Currency> {
+    return super.minimumAmountOut()
   }
 
   public get deadline(): number {
@@ -249,6 +303,9 @@ export class ClassicTrade<
   readonly swapFee?: SwapFee
   readonly indicative = false
 
+  readonly maxAmountIn: CurrencyAmount<Currency>
+  readonly minAmountOut: CurrencyAmount<Currency>
+
   constructor({
     quote,
     deadline,
@@ -283,8 +340,22 @@ export class ClassicTrade<
     this.deadline = deadline
     this.slippageTolerance = quote.quote.slippage ?? MAX_AUTO_SLIPPAGE_TOLERANCE
     this.swapFee = getSwapFee(quote)
+
+    const slippageTolerancePercent = slippageToleranceToPercent(this.slippageTolerance)
+    // TODO(SWAP-235): Cleanup redundancy
+    this.maxAmountIn = this.maximumAmountIn(slippageTolerancePercent)
+    this.minAmountOut = this.minimumAmountOut(slippageTolerancePercent)
   }
 
+  /** @deprecated see trade.maxAmountIn */
+  public maximumAmountIn(slippageTolerance: Percent): CurrencyAmount<TInput> {
+    return super.maximumAmountIn(slippageTolerance)
+  }
+
+  /** @deprecated see trade.minAmountOut */
+  public minimumAmountOut(slippageTolerance: Percent): CurrencyAmount<TOutput> {
+    return super.minimumAmountOut(slippageTolerance)
+  }
 
   private _cachedPriceImpact?: Percent
   // Overrides trade sdk price impact with backend price impact when available, as sdk price impact formula can be inaccurate.
@@ -313,7 +384,7 @@ export type Trade<
   TInput extends Currency = Currency,
   TOutput extends Currency = Currency,
   TTradeType extends TradeType = TradeType,
-> = ClassicTrade<TInput, TOutput, TTradeType> | UniswapXTrade | BridgeTrade | WrapTrade | UnwrapTrade
+> = ClassicTrade<TInput, TOutput, TTradeType> | UniswapXTrade | BridgeTrade | WrapTrade | UnwrapTrade | SolanaTrade
 
 export type TradeWithSlippage = Exclude<Trade, BridgeTrade>
 
@@ -329,7 +400,7 @@ export interface TradeWithStatus<T extends Trade = Trade> {
 }
 
 export interface UseTradeArgs {
-  account?: AccountMeta
+  account?: AccountDetails
   amountSpecified: Maybe<CurrencyAmount<Currency>>
   otherCurrency: Maybe<Currency>
   tradeType: TradeType
@@ -337,6 +408,7 @@ export interface UseTradeArgs {
   customSlippageTolerance?: number
   isUSDQuote?: boolean
   sendPortionEnabled?: boolean
+  // TODO(SWAP-154): Remove skip
   skip?: boolean
   selectedProtocols?: FrontendSupportedProtocol[]
   isDebouncing?: boolean
@@ -515,12 +587,14 @@ export class IndicativeTrade {
 }
 
 export class BridgeTrade {
-  quote: BridgeQuoteResponse
-  inputAmount: CurrencyAmount<Currency>
-  outputAmount: CurrencyAmount<Currency>
-  executionPrice: Price<Currency, Currency>
+  readonly quote: BridgeQuoteResponse
+  readonly inputAmount: CurrencyAmount<Currency>
+  readonly outputAmount: CurrencyAmount<Currency>
+  readonly maxAmountIn: CurrencyAmount<Currency>
+  readonly minAmountOut: CurrencyAmount<Currency>
+  readonly executionPrice: Price<Currency, Currency>
 
-  tradeType: TradeType
+  readonly tradeType: TradeType
   readonly routing = Routing.BRIDGE
   readonly indicative = false
   readonly swapFee?: SwapFee
@@ -551,20 +625,10 @@ export class BridgeTrade {
     this.outputAmount = outputAmount
     this.executionPrice = new Price(currencyIn, currencyOut, quoteInputAmount, quoteOutputAmount)
     this.tradeType = tradeType
-  }
 
-  /* Bridge trades have no slippage and hence a static execution price.
-  The following methods are overridden for compatibility with other trade types */
-  worstExecutionPrice(_threshold: Percent): Price<Currency, Currency> {
-    return this.executionPrice
-  }
-
-  maximumAmountIn(_slippageTolerance: Percent, _amountIn?: CurrencyAmount<Currency>): CurrencyAmount<Currency> {
-    return this.inputAmount
-  }
-
-  minimumAmountOut(_slippageTolerance: Percent, _amountOut?: CurrencyAmount<Currency>): CurrencyAmount<Currency> {
-    return this.outputAmount
+    /* Bridge trades have no slippage and hence static input/output amounts. `maxAmountIn` `and minAmountOut` are implemented for compatibility with other trade types. */
+    this.maxAmountIn = this.inputAmount
+    this.minAmountOut = this.outputAmount
   }
 
   public get quoteOutputAmount(): CurrencyAmount<Currency> {
@@ -585,6 +649,8 @@ export class BridgeTrade {
 abstract class BaseWrapTrade<TWrapType extends Routing.WRAP | Routing.UNWRAP> {
   inputAmount: CurrencyAmount<Currency>
   outputAmount: CurrencyAmount<Currency>
+  maxAmountIn: CurrencyAmount<Currency>
+  minAmountOut: CurrencyAmount<Currency>
   executionPrice: Price<Currency, Currency>
   quote: WrapQuoteResponse<TWrapType>
   tradeType: TradeType
@@ -612,17 +678,11 @@ abstract class BaseWrapTrade<TWrapType extends Routing.WRAP | Routing.UNWRAP> {
     this.outputAmount = outputAmount
     this.executionPrice = new Price(currencyIn, currencyOut, 1, 1)
     this.tradeType = tradeType
+    // Wrap/unwrap trades have no slippage and hence static input/output amounts.
+    this.maxAmountIn = this.inputAmount
+    this.minAmountOut = this.outputAmount
   }
-  /* Wrap trades have no slippage or fees hence a static execution price. */
-  worstExecutionPrice(_threshold: Percent): Price<Currency, Currency> {
-    return this.executionPrice
-  }
-  maximumAmountIn(_slippageTolerance: Percent, _amountIn?: CurrencyAmount<Currency>): CurrencyAmount<Currency> {
-    return this.inputAmount
-  }
-  minimumAmountOut(_slippageTolerance: Percent, _amountOut?: CurrencyAmount<Currency>): CurrencyAmount<Currency> {
-    return this.outputAmount
-  }
+
   public get quoteOutputAmount(): CurrencyAmount<Currency> {
     return this.outputAmount
   }

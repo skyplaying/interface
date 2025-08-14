@@ -17,6 +17,7 @@ import { focusOrCreateUnitagTab, useExtensionNavigation } from 'src/app/navigati
 import { Button, Flex, Popover, ScrollView, Text, TouchableArea, useSporeColors } from 'ui/src'
 import { Ellipsis, Globe, Person, TrashFilled, WalletFilled, X } from 'ui/src/components/icons'
 import { spacing } from 'ui/src/theme'
+import { AddressDisplay } from 'uniswap/src/components/accounts/AddressDisplay'
 import { WarningModal } from 'uniswap/src/components/modals/WarningModal/WarningModal'
 import { WarningSeverity } from 'uniswap/src/components/modals/WarningModal/types'
 import { AccountType, DisplayNameType } from 'uniswap/src/features/accounts/types'
@@ -27,7 +28,6 @@ import { TestID } from 'uniswap/src/test/fixtures/testIDs'
 import { ImportType } from 'uniswap/src/types/onboarding'
 import { logger } from 'utilities/src/logger/logger'
 import { sleep } from 'utilities/src/time/timing'
-import { AddressDisplay } from 'wallet/src/components/accounts/AddressDisplay'
 import { PlusCircle } from 'wallet/src/components/icons/PlusCircle'
 import { ContextMenu } from 'wallet/src/components/menu/ContextMenu'
 import { MenuContent } from 'wallet/src/components/menu/MenuContent'
@@ -70,6 +70,7 @@ export function AccountSwitcherScreen(): JSX.Element {
   // TODO: EXT-899 https://linear.app/uniswap/issue/EXT-899/enable-unitag-edit-button-is-account-header
   const activeAccountDisplayName = useDisplayName(activeAddress)
   const activeAccountHasUnitag = activeAccountDisplayName?.type === DisplayNameType.Unitag
+  const activeAccountHasENS = activeAccountDisplayName?.type === DisplayNameType.ENS
 
   const [showEditLabelModal, setShowEditLabelModal] = useState(false)
 
@@ -245,6 +246,7 @@ export function AccountSwitcherScreen(): JSX.Element {
               menuOptions={menuOptions}
               placement="bottom"
               onLeftClick
+              menuContainerStyleProps={{ mr: '$spacing12' }}
             >
               <TouchableArea
                 borderRadius="$roundedFull"
@@ -274,20 +276,22 @@ export function AccountSwitcherScreen(): JSX.Element {
             </Flex>
           </Flex>
 
-          <Flex pt="$padding16">
+          <Flex pt={activeAccountHasENS ? undefined : '$padding16'}>
             {activeAccountHasUnitag ? (
               <UnitagActionButton />
             ) : (
-              <Flex row>
-                <Button
-                  size="small"
-                  testID={TestID.AccountCard}
-                  emphasis="secondary"
-                  onPress={() => setShowEditLabelModal(true)}
-                >
-                  {t('account.wallet.header.button.title')}
-                </Button>
-              </Flex>
+              !activeAccountHasENS && (
+                <Flex row>
+                  <Button
+                    size="small"
+                    testID={TestID.AccountCard}
+                    emphasis="secondary"
+                    onPress={() => setShowEditLabelModal(true)}
+                  >
+                    {t('account.wallet.header.button.title')}
+                  </Button>
+                </Flex>
+              )
             )}
           </Flex>
         </Flex>

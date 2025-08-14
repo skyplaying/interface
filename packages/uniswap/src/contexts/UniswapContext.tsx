@@ -1,13 +1,24 @@
 import { JsonRpcProvider } from '@ethersproject/providers'
 import { Signer } from 'ethers/lib/ethers'
 import { createContext, PropsWithChildren, useContext, useMemo, useState } from 'react'
-import { AccountMeta } from 'uniswap/src/features/accounts/types'
+import { DisplayName } from 'uniswap/src/features/accounts/types'
+import { WalletDisplayNameOptions } from 'uniswap/src/features/accounts/useOnchainDisplayName'
 import { UniverseChainId } from 'uniswap/src/features/chains/types'
 import { FiatOnRampCurrency } from 'uniswap/src/features/fiatOnRamp/types'
+import { NFTItem } from 'uniswap/src/features/nfts/types'
 import { SwapDelegationInfo } from 'uniswap/src/features/smartWallet/delegation/types'
-import { useWallet } from 'uniswap/src/features/wallet/hooks/useWallet'
 import { useEvent } from 'utilities/src/react/hooks'
 import { Connector } from 'wagmi'
+
+export type NavigateToNftItemArgs = {
+  owner?: Address
+  address: Address
+  tokenId: string
+  fallbackChainId: UniverseChainId
+  chainId?: UniverseChainId
+  isSpam?: boolean
+  fallbackData?: NFTItem
+}
 
 /** Stores objects/utils that exist on all platforms, abstracting away app-level specifics for each, in order to allow usage in cross-platform code. */
 interface UniswapContextValue {
@@ -19,6 +30,7 @@ interface UniswapContextValue {
   navigateToReceive: () => void
   navigateToTokenDetails: (currencyId: string) => void
   navigateToExternalProfile: (args: { address: Address }) => void
+  navigateToNftDetails: (args: NavigateToNftItemArgs) => void
   navigateToNftCollection: (args: { collectionAddress: Address; chainId: UniverseChainId }) => void
   navigateToPoolDetails: (args: { poolId: Address; chainId: UniverseChainId }) => void
   handleShareToken: (args: { currencyId: string }) => void
@@ -32,6 +44,7 @@ interface UniswapContextValue {
   swapOutputChainId?: UniverseChainId
   signer: Signer | undefined
   useProviderHook: (chainId: number) => JsonRpcProvider | undefined
+  useWalletDisplayName: (address: Maybe<Address>, options?: WalletDisplayNameOptions) => DisplayName | undefined
   // Used for triggering wallet connection on web
   onConnectWallet?: () => void
   // Used for web to open the token selector from a banner not in the swap flow
@@ -57,12 +70,14 @@ export function UniswapProvider({
   navigateToReceive,
   navigateToTokenDetails,
   navigateToExternalProfile,
+  navigateToNftDetails,
   navigateToNftCollection,
   navigateToPoolDetails,
   handleShareToken,
   onSwapChainsChanged,
   signer,
   useProviderHook,
+  useWalletDisplayName,
   onConnectWallet,
   getCanSignPermits,
   getIsUniswapXSupported,
@@ -87,6 +102,7 @@ export function UniswapProvider({
       navigateToTokenDetails,
       navigateToExternalProfile,
       navigateToNftCollection,
+      navigateToNftDetails,
       navigateToPoolDetails,
       handleShareToken,
       onSwapChainsChanged: ({
@@ -104,6 +120,7 @@ export function UniswapProvider({
       },
       signer,
       useProviderHook,
+      useWalletDisplayName,
       onConnectWallet,
       swapInputChainId,
       swapOutputChainId,
@@ -126,21 +143,22 @@ export function UniswapProvider({
       navigateToTokenDetails,
       navigateToExternalProfile,
       navigateToNftCollection,
+      navigateToNftDetails,
       navigateToPoolDetails,
       handleShareToken,
       signer,
       useProviderHook,
+      useWalletDisplayName,
       onConnectWallet,
       swapInputChainId,
       swapOutputChainId,
       isSwapTokenSelectorOpen,
-      setIsSwapTokenSelectorOpen,
       getCanSignPermits,
-      onSwapChainsChanged,
       getIsUniswapXSupported,
       handleOnPressUniswapXUnsupported,
       getCanBatchTransactions,
       getSwapDelegationInfo,
+      onSwapChainsChanged,
     ],
   )
 
@@ -161,21 +179,6 @@ export function useUniswapContextSelector<T>(selector: (ctx: UniswapContextValue
   const stableSelector = useEvent(selector)
   const context = useContext(UniswapContext)
   return context ? stableSelector(context) : undefined
-}
-
-/** Cross-platform util for getting metadata for the active account/wallet, regardless of platform/environment. */
-export function useAccountMeta(): AccountMeta | undefined {
-  const wallet = useWallet()
-  return useMemo(() => {
-    if (!wallet.evmAccount) {
-      return undefined
-    }
-
-    return {
-      address: wallet.evmAccount.address,
-      type: wallet.evmAccount.accountType,
-    }
-  }, [wallet])
 }
 
 /** Cross-platform util for getting connector for the active account/wallet, only applicable to web, other platforms are undefined. */

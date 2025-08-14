@@ -13,11 +13,12 @@ import { Flex, useSporeColors } from 'ui/src'
 import { GQLQueries } from 'uniswap/src/data/graphql/uniswap-data-api/queries'
 import { ModalName } from 'uniswap/src/features/telemetry/constants'
 import { useAppInsets } from 'uniswap/src/hooks/useAppInsets'
+import { TestID } from 'uniswap/src/test/fixtures/testIDs'
 import { DDRumManualTiming } from 'utilities/src/logger/datadog/datadogEvents'
 import { usePerformanceLogger } from 'utilities/src/logger/usePerformanceLogger'
 import { isAndroid } from 'utilities/src/platform'
 import { ScannerModalState } from 'wallet/src/components/QRCodeScanner/constants'
-import { useActivityData } from 'wallet/src/features/activity/hooks/useActivityData'
+import { useActivityDataWallet } from 'wallet/src/features/activity/useActivityDataWallet'
 
 export const ACTIVITY_TAB_DATA_DEPENDENCIES = [GQLQueries.TransactionList]
 
@@ -52,7 +53,7 @@ export const ActivityTab = memo(
       dispatch(openModal({ name: ModalName.WalletConnectScan, initialState: ScannerModalState.WalletQr }))
     }
 
-    const { maybeEmptyComponent, renderActivityItem, sectionData, keyExtractor } = useActivityData({
+    const { maybeEmptyComponent, renderActivityItem, sectionData, keyExtractor } = useActivityDataWallet({
       owner,
       authTrigger: requiresBiometrics ? biometricsTrigger : undefined,
       isExternalProfile,
@@ -76,7 +77,7 @@ export const ActivityTab = memo(
     const List = renderedInModal ? AnimatedBottomSheetFlatList : AnimatedFlatList
 
     return (
-      <Flex grow px="$spacing24">
+      <Flex grow px="$spacing24" testID={TestID.ActivityContent}>
         <List
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           ref={ref as ForwardedRef<Animated.FlatList<any>>}

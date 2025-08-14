@@ -8,6 +8,8 @@ import { NotificationBadge } from 'src/components/notifications/Badge'
 import { disableOnPress } from 'src/utils/disableOnPress'
 import { Flex, Text, TouchableArea } from 'ui/src'
 import { iconSizes } from 'ui/src/theme'
+import { AddressDisplay } from 'uniswap/src/components/accounts/AddressDisplay'
+import { useUnitagsAddressQuery } from 'uniswap/src/data/apiClients/unitagsApi/useUnitagsAddressQuery'
 import { AccountType } from 'uniswap/src/features/accounts/types'
 import { useEnabledChains } from 'uniswap/src/features/chains/hooks/useEnabledChains'
 import { useENS } from 'uniswap/src/features/ens/useENS'
@@ -16,11 +18,9 @@ import { pushNotification } from 'uniswap/src/features/notifications/slice'
 import { AppNotificationType, CopyNotificationType } from 'uniswap/src/features/notifications/types'
 import { ElementName, ModalName } from 'uniswap/src/features/telemetry/constants'
 import { sendAnalyticsEvent } from 'uniswap/src/features/telemetry/send'
-import { useUnitagByAddress } from 'uniswap/src/features/unitags/hooks'
 import { UnitagScreens } from 'uniswap/src/types/screens/mobile'
 import { setClipboard } from 'uniswap/src/utils/clipboard'
 import { NumberType } from 'utilities/src/format/types'
-import { AddressDisplay } from 'wallet/src/components/accounts/AddressDisplay'
 import { useAccountListData } from 'wallet/src/features/accounts/useAccountListData'
 import { useAccounts } from 'wallet/src/features/wallet/hooks'
 
@@ -83,7 +83,9 @@ export function AccountCardItem({
   const dispatch = useDispatch()
   const { defaultChainId } = useEnabledChains()
   const ensName = useENS({ nameOrAddress: address, chainId: defaultChainId }).name
-  const { unitag } = useUnitagByAddress(address)
+  const { data: unitag } = useUnitagsAddressQuery({
+    params: address ? { address } : undefined,
+  })
 
   const addressToAccount = useAccounts()
   const selectedAccount = addressToAccount[address]

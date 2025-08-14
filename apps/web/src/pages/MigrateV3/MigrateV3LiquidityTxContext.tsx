@@ -1,9 +1,21 @@
 import { ProtocolVersion } from '@uniswap/client-pools/dist/pools/v1/types_pb'
 import { Currency, CurrencyAmount } from '@uniswap/sdk-core'
+import { Pool } from '@uniswap/v4-sdk'
 import { V3PositionInfo } from 'components/Liquidity/types'
-import { useCreatePositionContext, usePriceRangeContext } from 'pages/Pool/Positions/create/CreatePositionContext'
-import { getCurrencyForProtocol, getTokenOrZeroAddress } from 'pages/Pool/Positions/create/utils'
-import { PropsWithChildren, createContext, useContext, useEffect, useMemo, useState } from 'react'
+import { getCurrencyForProtocol, getTokenOrZeroAddress } from 'components/Liquidity/utils/currency'
+import { isInvalidPrice, isInvalidRange } from 'components/Liquidity/utils/priceRangeInfo'
+import { useAccount } from 'hooks/useAccount'
+import { useCreateLiquidityContext } from 'pages/CreatePosition/CreateLiquidityContextProvider'
+import {
+  Dispatch,
+  PropsWithChildren,
+  SetStateAction,
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from 'react'
 import { ZERO_ADDRESS } from 'uniswap/src/constants/misc'
 import { useUniswapContext } from 'uniswap/src/contexts/UniswapContext'
 import { useCheckLpApprovalQuery } from 'uniswap/src/data/apiClients/tradingApi/useCheckLpApprovalQuery'
@@ -26,13 +38,13 @@ import { PermitMethod } from 'uniswap/src/features/transactions/swap/types/swapT
 import { validatePermit, validateTransactionRequest } from 'uniswap/src/features/transactions/swap/utils/trade'
 import { logger } from 'utilities/src/logger/logger'
 import { ONE_SECOND_MS } from 'utilities/src/time/time'
-import { useAccount } from 'wagmi'
 
 interface MigrateV3PositionTxContextType {
   txInfo?: MigrateV3PositionTxAndGasInfo
   gasFeeEstimateUSD?: CurrencyAmount<Currency>
-  error: boolean | string
+  transactionError: boolean | string
   refetch?: () => void
+  setTransactionError: Dispatch<SetStateAction<string | boolean>>
 }
 
 const MigrateV3PositionTxContext = createContext<MigrateV3PositionTxContextType | undefined>(undefined)
@@ -50,16 +62,13 @@ export function MigrateV3PositionTxContextProvider({
   positionInfo,
 }: PropsWithChildren<{ positionInfo: V3PositionInfo }>): JSX.Element {
   const account = useAccount()
-  const [hasMigrateErrorResponse, setHasMigrateErrorResponse] = useState(false)
+  const [transactionError, setTransactionError] = useState<string | boolean>(false)
 
-  const { derivedPositionInfo, positionState, currentTransactionStep } = useCreatePositionContext()
-  const {
-    derivedPriceRangeInfo,
-    priceRangeState: { fullRange },
-  } = usePriceRangeContext()
+  const { creatingPoolOrPair, protocolVersion, positionState, currentTransactionStep, poolOrPair, ticks, price } =
+    useCreateLiquidityContext()
   const generatePermitAsTransaction = useUniswapContext().getCanSignPermits?.(positionInfo.chainId)
 
-  const increaseLiquidityApprovalParams: CheckApprovalLPRequest | undefined = useMemo(() => {
+  const migrateLiquidityApprovalParams: CheckApprovalLPRequest | undefined = useMemo(() => {
     if (!account.address) {
       return undefined
     }
@@ -79,12 +88,12 @@ export function MigrateV3PositionTxContextProvider({
     error: approvalError,
     refetch: approvalRefetch,
   } = useCheckLpApprovalQuery({
-    params: increaseLiquidityApprovalParams,
+    params: migrateLiquidityApprovalParams,
     headers: {
       'x-universal-router-version': UniversalRouterVersion._2_0,
     },
     staleTime: 5 * ONE_SECOND_MS,
-    enabled: Boolean(increaseLiquidityApprovalParams),
+    enabled: Boolean(migrateLiquidityApprovalParams),
   })
 
   if (approvalError) {
@@ -105,19 +114,18 @@ export function MigrateV3PositionTxContextProvider({
     if (
       !positionInfo.tokenId ||
       !account.address ||
-      derivedPositionInfo.protocolVersion !== ProtocolVersion.V4 ||
-      derivedPriceRangeInfo.protocolVersion !== ProtocolVersion.V4 ||
-      !positionInfo.pool ||
+      protocolVersion !== ProtocolVersion.V4 ||
+      !positionInfo.poolOrPair ||
       !positionInfo.liquidity
     ) {
       return undefined
     }
-    const destinationPool = derivedPositionInfo.pool ?? derivedPriceRangeInfo.mockPool
+    const destinationPool = poolOrPair as Pool | undefined
     if (!destinationPool) {
       return undefined
     }
-    const tickLower = fullRange ? derivedPriceRangeInfo.tickSpaceLimits[0] : derivedPriceRangeInfo.ticks[0]
-    const tickUpper = fullRange ? derivedPriceRangeInfo.tickSpaceLimits[1] : derivedPriceRangeInfo.ticks[1]
+    const tickLower = ticks[0]
+    const tickUpper = ticks[1]
 
     if (tickLower === undefined || tickUpper === undefined || !positionInfo.liquidity) {
       return undefined
@@ -137,12 +145,12 @@ export function MigrateV3PositionTxContextProvider({
           fee: positionInfo.feeTier?.feeAmount,
           tickSpacing: positionInfo.tickSpacing ? Number(positionInfo.tickSpacing) : undefined,
         },
-        tickLower: positionInfo.tickLower ? Number(positionInfo.tickLower) : undefined,
-        tickUpper: positionInfo.tickUpper ? Number(positionInfo.tickUpper) : undefined,
+        tickLower: positionInfo.tickLower !== undefined ? positionInfo.tickLower : undefined,
+        tickUpper: positionInfo.tickUpper !== undefined ? positionInfo.tickUpper : undefined,
       },
-      inputPoolLiquidity: positionInfo.pool.liquidity.toString(),
-      inputCurrentTick: positionInfo.pool.tickCurrent,
-      inputSqrtRatioX96: positionInfo.pool.sqrtRatioX96.toString(),
+      inputPoolLiquidity: positionInfo.poolOrPair.liquidity.toString(),
+      inputCurrentTick: positionInfo.poolOrPair.tickCurrent,
+      inputSqrtRatioX96: positionInfo.poolOrPair.sqrtRatioX96.toString(),
       inputPositionLiquidity: positionInfo.liquidity,
 
       outputProtocol: ProtocolItems.V4,
@@ -157,11 +165,11 @@ export function MigrateV3PositionTxContextProvider({
         tickLower: tickLower ?? undefined,
         tickUpper: tickUpper ?? undefined,
       },
-      outputPoolLiquidity: derivedPositionInfo.creatingPoolOrPair ? undefined : destinationPool.liquidity.toString(),
-      outputSqrtRatioX96: derivedPositionInfo.creatingPoolOrPair ? undefined : destinationPool.sqrtRatioX96.toString(),
-      outputCurrentTick: derivedPositionInfo.creatingPoolOrPair ? undefined : destinationPool.tickCurrent,
+      outputPoolLiquidity: creatingPoolOrPair ? undefined : destinationPool.liquidity.toString(),
+      outputSqrtRatioX96: creatingPoolOrPair ? undefined : destinationPool.sqrtRatioX96.toString(),
+      outputCurrentTick: creatingPoolOrPair ? undefined : destinationPool.tickCurrent,
 
-      initialPrice: derivedPositionInfo.creatingPoolOrPair ? destinationPool.sqrtRatioX96.toString() : undefined,
+      initialPrice: creatingPoolOrPair ? destinationPool.sqrtRatioX96.toString() : undefined,
 
       chainId: positionInfo.currency0Amount.currency.chainId,
       walletAddress: account.address,
@@ -171,20 +179,20 @@ export function MigrateV3PositionTxContextProvider({
       amount1: positionInfo.currency1Amount.quotient.toString(),
     }
   }, [
-    derivedPositionInfo,
+    protocolVersion,
+    creatingPoolOrPair,
     positionInfo,
     account,
-    derivedPriceRangeInfo,
-    fullRange,
+    poolOrPair,
+    ticks,
     positionState.fee.feeAmount,
     positionState.hook,
     approvalsNeeded,
   ])
 
-  const isRangeValid =
-    derivedPriceRangeInfo.protocolVersion !== ProtocolVersion.V2 &&
-    !derivedPriceRangeInfo.invalidPrice &&
-    !derivedPriceRangeInfo.invalidRange
+  const invalidPrice = isInvalidPrice(price)
+  const invalidRange = isInvalidRange(ticks[0], ticks[1])
+  const isRangeValid = protocolVersion !== ProtocolVersion.V2 && !invalidPrice && !invalidRange
 
   const isUserCommitedToMigrate =
     currentTransactionStep?.step.type === TransactionStepType.MigratePositionTransaction ||
@@ -198,21 +206,23 @@ export function MigrateV3PositionTxContextProvider({
 
   const {
     data: migrateCalldata,
-    error: migrateError,
+    error: migrateCalldataError,
     refetch: migrateRefetch,
   } = useMigrateV3LpPositionCalldataQuery({
     params: migratePositionRequestArgs,
-    refetchInterval: hasMigrateErrorResponse ? false : 5 * ONE_SECOND_MS,
+    refetchInterval: transactionError ? false : 5 * ONE_SECOND_MS,
     retry: false,
     enabled: isQueryEnabled,
   })
 
   useEffect(() => {
-    setHasMigrateErrorResponse(!!migrateError)
-  }, [migrateError, migratePositionRequestArgs])
+    setTransactionError(getErrorMessageToDisplay({ calldataError: migrateCalldataError, approvalError }))
+  }, [migrateCalldataError, approvalError])
 
-  if (migrateError) {
-    const message = parseErrorMessageTitle(migrateError, { defaultTitle: 'unknown MigrateLpPositionCalldataQuery' })
+  if (migrateCalldataError) {
+    const message = parseErrorMessageTitle(migrateCalldataError, {
+      defaultTitle: 'unknown MigrateLpPositionCalldataQuery',
+    })
     logger.error(message, {
       tags: {
         file: 'MigrateV3LiquidityTxContext',
@@ -291,8 +301,9 @@ export function MigrateV3PositionTxContextProvider({
     <MigrateV3PositionTxContext.Provider
       value={{
         txInfo: validatedValue,
-        error: getErrorMessageToDisplay({ approvalError, calldataError: migrateError }),
-        refetch: approvalError ? approvalRefetch : migrateError ? migrateRefetch : undefined,
+        transactionError,
+        setTransactionError,
+        refetch: approvalError ? approvalRefetch : transactionError ? migrateRefetch : undefined,
       }}
     >
       {children}

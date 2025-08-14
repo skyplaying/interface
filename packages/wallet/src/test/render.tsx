@@ -11,9 +11,12 @@ import {
   RenderResult,
 } from '@testing-library/react-native'
 import React, { PropsWithChildren } from 'react'
+import { UniswapProvider } from 'uniswap/src/contexts/UniswapContext'
 import { Resolvers } from 'uniswap/src/data/graphql/uniswap-data-api/__generated__/types-and-hooks'
 import { AutoMockedApolloProvider } from 'uniswap/src/test/mocks'
+import { mockUniswapContext } from 'uniswap/src/test/render'
 import { WalletNavigationContextState, WalletNavigationProvider } from 'wallet/src/contexts/WalletNavigationContext'
+import { NativeWalletProvider } from 'wallet/src/features/wallet/providers/NativeWalletProvider'
 import { SharedWalletProvider } from 'wallet/src/providers/SharedWalletProvider'
 import { WalletStateReducersOnly, walletRootReducer } from 'wallet/src/state/walletReducer'
 
@@ -38,7 +41,6 @@ const mockNavigationFunctions: WalletNavigationContextState = {
   navigateToTokenDetails: jest.fn(),
   navigateToReceive: jest.fn(),
   navigateToSend: jest.fn(),
-  handleShareNft: jest.fn(),
   handleShareToken: jest.fn(),
   navigateToPoolDetails: jest.fn(),
 }
@@ -71,7 +73,11 @@ export function renderWithProviders(
     return (
       <AutoMockedApolloProvider cache={cache} resolvers={resolvers}>
         <SharedWalletProvider reduxStore={store}>
-          <WalletNavigationProvider {...mockNavigationFunctions}>{children}</WalletNavigationProvider>
+          <NativeWalletProvider>
+            <UniswapProvider {...mockUniswapContext}>
+              <WalletNavigationProvider {...mockNavigationFunctions}>{children}</WalletNavigationProvider>
+            </UniswapProvider>
+          </NativeWalletProvider>
         </SharedWalletProvider>
       </AutoMockedApolloProvider>
     )
@@ -137,7 +143,9 @@ export function renderHookWithProviders<P extends any[], R>(
   function Wrapper({ children }: PropsWithChildren<unknown>): JSX.Element {
     return (
       <AutoMockedApolloProvider cache={cache} resolvers={resolvers}>
-        <SharedWalletProvider reduxStore={store}>{children}</SharedWalletProvider>
+        <SharedWalletProvider reduxStore={store}>
+          <NativeWalletProvider>{children}</NativeWalletProvider>
+        </SharedWalletProvider>
       </AutoMockedApolloProvider>
     )
   }

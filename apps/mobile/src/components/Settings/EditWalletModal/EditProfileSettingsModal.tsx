@@ -2,7 +2,8 @@ import { default as React, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { StyleSheet } from 'react-native'
 import ContextMenu from 'react-native-context-menu-view'
-import { KeyboardAvoidingView } from 'react-native-keyboard-controller'
+import { ScrollView } from 'react-native-gesture-handler'
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller'
 import { navigate } from 'src/app/navigation/rootNavigation'
 import { AppStackScreenProp } from 'src/app/navigation/types'
 import { navigateBackFromEditingWallet } from 'src/components/Settings/EditWalletModal/EditWalletNavigation'
@@ -12,11 +13,10 @@ import { Flex, Text } from 'ui/src'
 import { Ellipsis } from 'ui/src/components/icons'
 import { Modal } from 'uniswap/src/components/modals/Modal'
 import { useBottomSheetSafeKeyboard } from 'uniswap/src/components/modals/useBottomSheetSafeKeyboard'
+import { useUnitagsAddressQuery } from 'uniswap/src/data/apiClients/unitagsApi/useUnitagsAddressQuery'
 import { ModalName } from 'uniswap/src/features/telemetry/constants'
-import { useUnitagByAddress } from 'uniswap/src/features/unitags/hooks'
 import { MobileScreens } from 'uniswap/src/types/screens/mobile'
 import { dismissNativeKeyboard } from 'utilities/src/device/keyboard/dismissNativeKeyboard'
-import { isIOS } from 'utilities/src/platform'
 import { ChangeUnitagModal } from 'wallet/src/features/unitags/ChangeUnitagModal'
 import { DeleteUnitagModal } from 'wallet/src/features/unitags/DeleteUnitagModal'
 import { EditUnitagProfileContent } from 'wallet/src/features/unitags/EditUnitagProfileContent'
@@ -28,7 +28,9 @@ export function EditProfileSettingsModal({
   const { address, accessPoint } = route.params
   const entryPoint = accessPoint ?? MobileScreens.SettingsWallet
 
-  const { unitag: retrievedUnitag } = useUnitagByAddress(address)
+  const { data: retrievedUnitag } = useUnitagsAddressQuery({
+    params: address ? { address } : undefined,
+  })
   const unitag = retrievedUnitag?.username
 
   const { t } = useTranslation()
@@ -74,41 +76,36 @@ export function EditProfileSettingsModal({
 
   return (
     <Modal fullScreen name={ModalName.EditProfileSettingsModal} onClose={onClose}>
-      <KeyboardAvoidingView
-        behavior={isIOS ? 'padding' : undefined}
-        // Disable the keyboard avoiding view when the modals are open, otherwise background elements will shift up when the user is editing their username
-        enabled={!showDeleteUnitagModal && !showChangeUnitagModal}
-        style={styles.base}
+      <BackHeader
+        alignment="center"
+        endAdornment={
+          <ContextMenu
+            dropdownMenuMode
+            actions={menuActions}
+            onPress={(e): void => {
+              dismissNativeKeyboard()
+              // Emitted index based on order of menu action array
+              // Edit username
+              if (e.nativeEvent.index === 0) {
+                setShowChangeUnitagModal(true)
+              }
+              // Delete username
+              if (e.nativeEvent.index === 1) {
+                setShowDeleteUnitagModal(true)
+              }
+            }}
+          >
+            <Flex pr="$spacing8">
+              <Ellipsis color="$neutral2" size="$icon.24" />
+            </Flex>
+          </ContextMenu>
+        }
+        p="$spacing16"
+        onPressBack={onPressBack}
       >
-        <BackHeader
-          alignment="center"
-          endAdornment={
-            <ContextMenu
-              dropdownMenuMode
-              actions={menuActions}
-              onPress={(e): void => {
-                dismissNativeKeyboard()
-                // Emitted index based on order of menu action array
-                // Edit username
-                if (e.nativeEvent.index === 0) {
-                  setShowChangeUnitagModal(true)
-                }
-                // Delete username
-                if (e.nativeEvent.index === 1) {
-                  setShowDeleteUnitagModal(true)
-                }
-              }}
-            >
-              <Flex pr="$spacing8">
-                <Ellipsis color="$neutral2" size="$icon.24" />
-              </Flex>
-            </ContextMenu>
-          }
-          p="$spacing16"
-          onPressBack={onPressBack}
-        >
-          <Text variant="body1">{t('settings.setting.wallet.action.editProfile')}</Text>
-        </BackHeader>
+        <Text variant="body1">{t('settings.setting.wallet.action.editProfile')}</Text>
+      </BackHeader>
+      <KeyboardAwareScrollView ScrollViewComponent={ScrollView} contentContainerStyle={styles.base}>
         {unitag && (
           <EditUnitagProfileContent
             address={address}
@@ -118,7 +115,7 @@ export function EditProfileSettingsModal({
             onButtonClick={onButtonClick}
           />
         )}
-      </KeyboardAvoidingView>
+      </KeyboardAwareScrollView>
       {showDeleteUnitagModal && unitag && (
         <DeleteUnitagModal address={address} unitag={unitag} onSuccess={onBack} onClose={onCloseDeleteModal} />
       )}

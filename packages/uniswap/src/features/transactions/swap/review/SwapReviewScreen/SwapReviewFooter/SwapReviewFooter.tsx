@@ -2,6 +2,8 @@ import { memo, useMemo } from 'react'
 import { Flex, IconButton, useIsShortMobileDevice } from 'ui/src'
 import { BackArrow } from 'ui/src/components/icons/BackArrow'
 import type { Warning } from 'uniswap/src/components/modals/WarningModal/types'
+import { UniverseChainId } from 'uniswap/src/features/chains/types'
+import { UnichainPoweredMessage } from 'uniswap/src/features/transactions/TransactionDetails/UnichainPoweredMessage'
 import { getShouldDisplayTokenWarningCard } from 'uniswap/src/features/transactions/TransactionDetails/utils/getShouldDisplayTokenWarningCard'
 import { TransactionModalFooterContainer } from 'uniswap/src/features/transactions/components/TransactionModal/TransactionModal'
 import { SubmitSwapButton } from 'uniswap/src/features/transactions/swap/review/SwapReviewScreen/SwapReviewFooter/SubmitSwapButton'
@@ -19,6 +21,9 @@ export const SwapReviewFooter = memo(function SwapReviewFooter(): JSX.Element | 
   const { onPrev } = useSwapOnPrevious()
   const { disabled, showPendingUI, warning, onSubmit } = useSwapSubmitButton()
   const isShortMobileDevice = useIsShortMobileDevice()
+  const { chainId } = useSwapReviewTransactionStore((s) => ({ chainId: s.chainId }))
+
+  const isUnichain = !!(chainId && [UniverseChainId.Unichain, UniverseChainId.UnichainSepolia].includes(chainId))
 
   if (showInterfaceReviewSteps) {
     return null
@@ -26,6 +31,7 @@ export const SwapReviewFooter = memo(function SwapReviewFooter(): JSX.Element | 
 
   return (
     <TransactionModalFooterContainer>
+      {isUnichain && <UnichainPoweredMessage />}
       <Flex row gap="$spacing8">
         {!isWeb && !showPendingUI && (
           <IconButton

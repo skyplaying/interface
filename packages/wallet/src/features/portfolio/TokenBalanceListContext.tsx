@@ -16,7 +16,7 @@ import {
   sortPortfolioBalances,
   usePortfolioBalances,
   useTokenBalancesGroupedByVisibility,
-} from 'uniswap/src/features/dataApi/balances'
+} from 'uniswap/src/features/dataApi/balances/balances'
 import { PortfolioBalance } from 'uniswap/src/features/dataApi/types'
 import { isWarmLoadingStatus } from 'wallet/src/data/utils'
 
@@ -34,6 +34,7 @@ type TokenBalanceListContextState = {
   rows: Array<TokenBalanceListRow>
   setHiddenTokensExpanded: Dispatch<SetStateAction<boolean>>
   onPressToken?: (currencyId: CurrencyId) => void
+  owner: Address
 }
 
 export const TokenBalanceListContext = createContext<TokenBalanceListContextState | undefined>(undefined)
@@ -122,6 +123,7 @@ export function TokenBalanceListContextProvider({
       refetch,
       rows,
       setHiddenTokensExpanded,
+      owner,
     }),
     [
       balancesById,
@@ -132,6 +134,7 @@ export function TokenBalanceListContextProvider({
       onPressToken,
       refetch,
       rows,
+      owner,
     ],
   )
 

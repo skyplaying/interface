@@ -22,10 +22,17 @@ export type SwapFormState = {
   preselectAsset?: boolean
   isSubmitting: boolean
   showPendingUI: boolean
+  isConfirmed: boolean
+  /** The actual transaction hash once it is known (interface only) */
+  txHash?: string
+  /** The time when the transaction hash was received (interface only) */
+  txHashReceivedTime?: number
   hideFooter?: boolean
   hideSettings?: boolean
   prefilledCurrencies?: TradeableAsset[]
   isPrefilled?: boolean
+  instantOutputAmountRaw?: string
+  instantReceiptFetchTime?: number
 }
 
 type SwapFormMethods = {

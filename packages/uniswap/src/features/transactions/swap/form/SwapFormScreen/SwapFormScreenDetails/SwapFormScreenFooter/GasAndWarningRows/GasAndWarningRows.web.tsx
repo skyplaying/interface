@@ -1,14 +1,15 @@
 import { Flex } from 'ui/src'
-import { useAccountMeta } from 'uniswap/src/contexts/UniswapContext'
+import { WarningLabel } from 'uniswap/src/components/modals/WarningModal/types'
 import { InsufficientNativeTokenWarning } from 'uniswap/src/features/transactions/components/InsufficientNativeTokenWarning/InsufficientNativeTokenWarning'
 import { BlockedAddressWarning } from 'uniswap/src/features/transactions/modals/BlockedAddressWarning'
 import { TradeInfoRow } from 'uniswap/src/features/transactions/swap/form/SwapFormScreen/SwapFormScreenDetails/SwapFormScreenFooter/GasAndWarningRows/TradeInfoRow/TradeInfoRow'
 import { useDebouncedGasInfo } from 'uniswap/src/features/transactions/swap/form/SwapFormScreen/SwapFormScreenDetails/SwapFormScreenFooter/GasAndWarningRows/useDebouncedGasInfo'
 import { useParsedSwapWarnings } from 'uniswap/src/features/transactions/swap/hooks/useSwapWarnings/useSwapWarnings'
 import { useIsBlocked } from 'uniswap/src/features/trm/hooks'
+import { useWallet } from 'uniswap/src/features/wallet/hooks/useWallet'
 
 export function GasAndWarningRows(): JSX.Element {
-  const account = useAccountMeta()
+  const account = useWallet().evmAccount
 
   const { isBlocked } = useIsBlocked(account?.address)
 
@@ -17,6 +18,10 @@ export function GasAndWarningRows(): JSX.Element {
     formScreenWarning && formScreenWarning.displayedInline && !isBlocked ? formScreenWarning.warning : undefined
 
   const debouncedGasInfo = useDebouncedGasInfo()
+
+  const insufficientGasFundsWarning = warnings.find((w) => {
+    return w.type === WarningLabel.InsufficientFunds
+  })
 
   return (
     <>
@@ -40,9 +45,11 @@ export function GasAndWarningRows(): JSX.Element {
           />
         )}
 
-        <Flex gap="$spacing8" px="$spacing8" py="$spacing4">
-          <TradeInfoRow gasInfo={debouncedGasInfo} warning={inlineWarning} />
-        </Flex>
+        {!insufficientGasFundsWarning && (
+          <Flex gap="$spacing8" px="$spacing8" py="$spacing4">
+            <TradeInfoRow gasInfo={debouncedGasInfo} warning={inlineWarning} />
+          </Flex>
+        )}
 
         <InsufficientNativeTokenWarning flow="swap" gasFee={debouncedGasInfo.gasFee} warnings={warnings} />
       </Flex>

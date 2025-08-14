@@ -1,15 +1,16 @@
 // eslint-disable-next-line @typescript-eslint/no-restricted-imports
-import { useAllFeeTierPoolData } from 'components/Liquidity/hooks'
+import { useAllFeeTierPoolData } from 'components/Liquidity/hooks/useAllFeeTierPoolData'
 import {
   MAX_FEE_TIER_DECIMALS,
   calculateTickSpacingFromFeeAmount,
   getFeeTierKey,
   isDynamicFeeTier,
-} from 'components/Liquidity/utils'
+  validateFeeTier,
+} from 'components/Liquidity/utils/feeTiers'
 import { LpIncentivesAprDisplay } from 'components/LpIncentives/LpIncentivesAprDisplay'
 import { StyledPercentInput } from 'components/PercentInput'
 import ms from 'ms'
-import { useCreatePositionContext } from 'pages/Pool/Positions/create/CreatePositionContext'
+import { useCreateLiquidityContext } from 'pages/CreatePosition/CreateLiquidityContextProvider'
 import { NumericalInputMimic, NumericalInputSymbolContainer } from 'pages/Swap/common/shared'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -54,12 +55,12 @@ export function FeeTierSearchModal() {
   const { chainId } = useMultichainContext()
   const {
     positionState: { fee: selectedFee, protocolVersion, hook },
-    derivedPositionInfo,
+    currencies,
     setPositionState,
     feeTierSearchModalOpen,
     setFeeTierSearchModalOpen,
     setDynamicFeeTierSpeedbumpData,
-  } = useCreatePositionContext()
+  } = useCreateLiquidityContext()
   const onClose = () => {
     setCreateFeeValue('')
     setCreateModeEnabled(false)
@@ -78,15 +79,13 @@ export function FeeTierSearchModal() {
 
   const withDynamicFeeTier = Boolean(hook)
   const isLpIncentivesEnabled = useFeatureFlag(FeatureFlags.LpIncentives)
-  const { feeTierData, hasExistingFeeTiers } = useAllFeeTierPoolData({
+  const { feeTierData } = useAllFeeTierPoolData({
     chainId,
     protocolVersion,
-    sdkCurrencies: derivedPositionInfo.currencies.sdk,
+    sdkCurrencies: currencies.sdk,
     withDynamicFeeTier,
     hook: hook ?? ZERO_ADDRESS,
   })
-
-  const showCreateModal = !withDynamicFeeTier && (createModeEnabled || !hasExistingFeeTiers)
 
   useEffect(() => {
     let interval: NodeJS.Timeout
@@ -125,9 +124,7 @@ export function FeeTierSearchModal() {
               return SMALLEST_BIP_AMOUNT.toString()
             }
             newValue += SMALLEST_BIP_AMOUNT
-            if (newValue > 100) {
-              return '100'
-            }
+            return validateFeeTier(newValue.toFixed(MAX_FEE_TIER_DECIMALS))
           }
           return newValue.toFixed(MAX_FEE_TIER_DECIMALS)
         })
@@ -175,21 +172,21 @@ export function FeeTierSearchModal() {
         <Flex row justifyContent="space-between" alignItems="center" gap="$spacing4" width="100%">
           {createModeEnabled && (
             <Flex {...ClickableTamaguiStyle} onPress={() => setCreateModeEnabled(false)}>
-              <BackArrow size="$icon.24" />
+              <BackArrow size="$icon.24" color="$neutral2" />
             </Flex>
           )}
           <Text
             variant="body2"
             flexGrow={1}
-            textAlign={showCreateModal || isMobileWeb ? 'center' : 'left'}
-            pl={showCreateModal ? 0 : 8}
+            textAlign={createModeEnabled || isMobileWeb ? 'center' : 'left'}
+            pl={createModeEnabled ? 0 : 8}
           >
-            {showCreateModal ? t('fee.tier.create') : t('fee.tier.select')}
+            {createModeEnabled ? t('fee.tier.create') : t('fee.tier.select')}
           </Text>
           <ModalCloseIcon testId="LiquidityModalHeader-close" onClose={onClose} />
         </Flex>
 
-        {showCreateModal ? (
+        {createModeEnabled ? (
           <Flex gap="$gap20">
             <Text variant="body2" color="$neutral2" textAlign="center">
               {t('fee.tier.create.description')}
@@ -232,11 +229,7 @@ export function FeeTierSearchModal() {
                   <FeeTierPercentInput
                     value={createFeeValue}
                     onUserInput={(input) => {
-                      if (parseFloat(input) > 100) {
-                        setCreateFeeValue('100')
-                      } else {
-                        setCreateFeeValue(input)
-                      }
+                      setCreateFeeValue(validateFeeTier(input))
                     }}
                     placeholder="0"
                     maxDecimals={MAX_FEE_TIER_DECIMALS}
@@ -271,10 +264,7 @@ export function FeeTierSearchModal() {
                       return SMALLEST_BIP_AMOUNT.toString()
                     }
                     const newValue = parseFloat(prev) + SMALLEST_BIP_AMOUNT
-                    if (newValue > 100) {
-                      return '100'
-                    }
-                    return newValue.toFixed(MAX_FEE_TIER_DECIMALS)
+                    return validateFeeTier(newValue.toFixed(MAX_FEE_TIER_DECIMALS))
                   })
                 }}
                 {...ClickableTamaguiStyle}
@@ -357,13 +347,13 @@ export function FeeTierSearchModal() {
                     return
                   }
 
-                  const newValue = parseFloat(value)
-                  if (newValue > 100) {
-                    setSearchValue('100')
+                  const validFeeTier = validateFeeTier(value)
+                  if (validFeeTier !== value) {
+                    setSearchValue(validFeeTier)
                     return
                   }
 
-                  setSearchValue(newValue >= 0 ? value : '')
+                  setSearchValue(Number(validFeeTier) >= 0 ? validFeeTier : '')
                 }}
               />
             </Flex>

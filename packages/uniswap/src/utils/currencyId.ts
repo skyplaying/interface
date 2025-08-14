@@ -1,10 +1,12 @@
 import { Currency } from '@uniswap/sdk-core'
 import { getNativeAddress, getWrappedNativeAddress } from 'uniswap/src/constants/addresses'
+import { normalizeTokenAddressForCache } from 'uniswap/src/data/cache'
 import { TradeableAsset } from 'uniswap/src/entities/assets'
 import { getChainInfo } from 'uniswap/src/features/chains/chainInfo'
 import { DEFAULT_NATIVE_ADDRESS, DEFAULT_NATIVE_ADDRESS_LEGACY } from 'uniswap/src/features/chains/evm/defaults'
 import { UniverseChainId } from 'uniswap/src/features/chains/types'
 import { toSupportedChainId } from 'uniswap/src/features/chains/utils'
+import { Platform } from 'uniswap/src/features/platforms/types/Platform'
 import { CurrencyId } from 'uniswap/src/types/currency'
 import { areAddressesEqual, getValidAddress } from 'uniswap/src/utils/addresses'
 
@@ -101,12 +103,21 @@ export const isNativeCurrencyAddress = (chainId: UniverseChainId, address: Maybe
   // allow both native address formats until all backend endpoints return the new one
   if (nativeAddress === DEFAULT_NATIVE_ADDRESS_LEGACY) {
     return (
-      areAddressesEqual(address, nativeAddress, platform) ||
-      areAddressesEqual(address, DEFAULT_NATIVE_ADDRESS, platform)
+      areAddressesEqual({
+        addressInput1: { address, platform },
+        addressInput2: { address: nativeAddress, platform },
+      }) ||
+      areAddressesEqual({
+        addressInput1: { address, platform },
+        addressInput2: { address: DEFAULT_NATIVE_ADDRESS, platform },
+      })
     )
   }
 
-  return areAddressesEqual(address, nativeAddress, platform)
+  return areAddressesEqual({
+    addressInput1: { address, platform },
+    addressInput2: { address: nativeAddress, platform },
+  })
 }
 
 // Currency ids are formatted as `chainId-tokenaddress`
@@ -144,13 +155,16 @@ export function currencyIdToGraphQLAddress(_currencyId?: string): Address | null
     return null
   }
 
-  return address.toLowerCase()
+  return normalizeTokenAddressForCache(address)
 }
 
 export function currencyIdToChain(_currencyId: string): UniverseChainId | null {
   return toSupportedChainId(_currencyId.split('-')[0])
 }
 
-export function isDefaultNativeAddress(address: string): boolean {
-  return areAddressesEqual(address, DEFAULT_NATIVE_ADDRESS_LEGACY)
+export function isDefaultNativeAddress({ address, platform }: { address: string; platform: Platform }): boolean {
+  return areAddressesEqual({
+    addressInput1: { address, platform },
+    addressInput2: { address: DEFAULT_NATIVE_ADDRESS_LEGACY, platform },
+  })
 }

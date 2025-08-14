@@ -9,19 +9,18 @@ import { disableOnPress } from 'src/utils/disableOnPress'
 import { Flex, TouchableArea } from 'ui/src'
 import { iconSizes } from 'ui/src/theme'
 import { uniswapUrls } from 'uniswap/src/constants/urls'
+import { useUnitagsAddressQuery } from 'uniswap/src/data/apiClients/unitagsApi/useUnitagsAddressQuery'
 import { getChainInfo } from 'uniswap/src/features/chains/chainInfo'
 import { useEnabledChains } from 'uniswap/src/features/chains/hooks/useEnabledChains'
 import { pushNotification } from 'uniswap/src/features/notifications/slice'
 import { AppNotificationType, CopyNotificationType } from 'uniswap/src/features/notifications/types'
 import { ElementName, WalletEventName } from 'uniswap/src/features/telemetry/constants'
 import { sendAnalyticsEvent } from 'uniswap/src/features/telemetry/send'
-import { useUnitagByAddress } from 'uniswap/src/features/unitags/hooks'
 import { MobileScreens } from 'uniswap/src/types/screens/mobile'
 import { ShareableEntity } from 'uniswap/src/types/sharing'
 import { setClipboard } from 'uniswap/src/utils/clipboard'
-import { ExplorerDataType, getExplorerLink, openUri } from 'uniswap/src/utils/linking'
+import { ExplorerDataType, getExplorerLink, getProfileUrl, openUri } from 'uniswap/src/utils/linking'
 import { logger } from 'utilities/src/logger/logger'
-import { getProfileUrl } from 'wallet/src/utils/linking'
 
 type MenuAction = {
   title: string
@@ -32,7 +31,9 @@ type MenuAction = {
 export function ProfileContextMenu({ address }: { address: Address }): JSX.Element {
   const { t } = useTranslation()
   const dispatch = useDispatch()
-  const { unitag } = useUnitagByAddress(address)
+  const { data: unitag } = useUnitagsAddressQuery({
+    params: address ? { address } : undefined,
+  })
   const { defaultChainId } = useEnabledChains()
 
   const onPressCopyAddress = useCallback(async () => {
@@ -120,13 +121,7 @@ export function ProfileContextMenu({ address }: { address: Address }): JSX.Eleme
         await menuActions[e.nativeEvent.index]?.action()
       }}
     >
-      <TouchableArea
-        backgroundColor="$surface3"
-        borderRadius="$roundedFull"
-        opacity={0.8}
-        p="$spacing8"
-        onLongPress={disableOnPress}
-      >
+      <TouchableArea backgroundColor="$surface4" borderRadius="$roundedFull" p="$spacing8" onLongPress={disableOnPress}>
         <Flex centered grow height={iconSizes.icon16} width={iconSizes.icon16}>
           <TripleDot color="$white" size={3.5} />
         </Flex>

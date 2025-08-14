@@ -43,8 +43,8 @@ export const WORLD_CHAIN_INFO = {
   docs: 'https://docs.worldcoin.org/',
   elementName: ElementName.ChainWorldChain,
   explorer: {
-    name: 'World Chain Explorer',
-    url: 'https://worldchain-mainnet.explorer.alchemy.com/',
+    name: 'World Chain Mainnet Explorer',
+    url: 'https://worldscan.org/',
   },
   interfaceName: 'worldchain',
   label: 'World Chain',
@@ -78,4 +78,5 @@ export const WORLD_CHAIN_INFO = {
     address: '0x4200000000000000000000000000000000000006',
   },
   testnet: false,
+  tradingApiPollingIntervalMs: 250,
 } as const satisfies UniverseChainInfo
