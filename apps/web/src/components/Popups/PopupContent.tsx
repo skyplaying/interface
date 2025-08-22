@@ -11,6 +11,7 @@ import AlertTriangleFilled from 'components/Icons/AlertTriangleFilled'
 import { LoaderV3 } from 'components/Icons/LoadingSpinner'
 import { ToastRegularSimple } from 'components/Popups/ToastRegularSimple'
 import { POPUP_MAX_WIDTH } from 'components/Popups/constants'
+import { useIsRecentFlashblocksNotification } from 'hooks/useIsRecentFlashblocksNotification'
 import { useTranslation } from 'react-i18next'
 import { useOrder } from 'state/signatures/hooks'
 import { useTransaction } from 'state/transactions/hooks'
@@ -24,6 +25,7 @@ import { useIsSupportedChainId } from 'uniswap/src/features/chains/hooks/useSupp
 import { UniverseChainId } from 'uniswap/src/features/chains/types'
 import { FORTransaction } from 'uniswap/src/features/fiatOnRamp/types'
 import { useLocalizationContext } from 'uniswap/src/features/language/LocalizationContext'
+import { isNonInstantFlashblockTransactionType } from 'uniswap/src/features/transactions/swap/components/UnichainInstantBalanceModal/utils'
 import { TransactionStatus } from 'uniswap/src/features/transactions/types/transactionDetails'
 import { TestID } from 'uniswap/src/test/fixtures/testIDs'
 import { ExplorerDataType, getExplorerLink } from 'uniswap/src/utils/linking'
@@ -123,22 +125,28 @@ function ActivityPopupContent({ activity, onClick, onClose }: ActivityPopupConte
   )
 }
 
-export function TransactionPopupContent({
-  chainId,
-  hash,
-  onClose,
-}: {
-  chainId: UniverseChainId
-  hash: string
-  onClose: () => void
-}) {
+export function TransactionPopupContent({ hash, onClose }: { hash: string; onClose: () => void }) {
   const transaction = useTransaction(hash)
+
   const { formatNumberOrString } = useLocalizationContext()
   const { data: activity } = useQuery(
-    getTransactionToActivityQueryOptions({ transaction, chainId, formatNumber: formatNumberOrString }),
+    getTransactionToActivityQueryOptions({
+      transaction,
+      formatNumber: formatNumberOrString,
+    }),
   )
 
+  const isFlashblockNotification = useIsRecentFlashblocksNotification({ transaction, activity })
+
   if (!transaction || !activity) {
+    return null
+  }
+
+  if (
+    isFlashblockNotification &&
+    !isNonInstantFlashblockTransactionType(transaction) &&
+    activity.status === TransactionStatus.Success
+  ) {
     return null
   }
 

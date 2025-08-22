@@ -10,10 +10,10 @@ import FavoriteTokenCard from 'src/components/explore/FavoriteTokenCard'
 import { getTokenValue } from 'ui/src'
 import { AnimatedFlex } from 'ui/src/components/layout/AnimatedFlex'
 import { Flex } from 'ui/src/components/layout/Flex'
+import { ExpandoRow } from 'uniswap/src/components/ExpandoRow/ExpandoRow'
 import { selectFavoriteTokens } from 'uniswap/src/features/favorites/selectors'
 import { setFavoriteTokens } from 'uniswap/src/features/favorites/slice'
 import { useHapticFeedback } from 'uniswap/src/features/settings/useHapticFeedback/useHapticFeedback'
-import { ExpandoRow } from 'wallet/src/components/ExpandoRow/ExpandoRow'
 
 const NUM_COLUMNS = 2
 const DEFAULT_TOKENS_TO_DISPLAY = 4
@@ -46,10 +46,6 @@ export function FavoriteTokensGrid({ showLoading, listRef, ...rest }: FavoriteTo
       setShowAll(true)
     }
   }, [isEditing])
-
-  const toggleShowMore = useCallback((): void => {
-    setShowAll(!showAll)
-  }, [showAll])
 
   const handleDragStart = useCallback(async () => {
     await hapticFeedback.light()
@@ -103,7 +99,7 @@ export function FavoriteTokensGrid({ showLoading, listRef, ...rest }: FavoriteTo
         <Flex>
           <Sortable.Grid
             {...rest}
-            animateHeight
+            dimensionsAnimationType="worklet"
             scrollableRef={listRef}
             data={visibleTokens}
             sortEnabled={isEditing}
@@ -120,7 +116,7 @@ export function FavoriteTokensGrid({ showLoading, listRef, ...rest }: FavoriteTo
               isExpanded={showAll}
               label={showAll ? t('common.showLess.button') : t('common.showMore.button')}
               mx="$spacing16"
-              onPress={toggleShowMore}
+              onPress={(): void => setShowAll((value: boolean) => !value)}
             />
           )}
         </Flex>

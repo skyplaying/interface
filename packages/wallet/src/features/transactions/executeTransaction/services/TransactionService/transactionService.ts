@@ -1,8 +1,34 @@
-import type { AccountMeta } from 'uniswap/src/features/accounts/types'
+import { providers } from 'ethers/lib/ethers'
+import type { AccountMeta, SignerMnemonicAccountMeta } from 'uniswap/src/features/accounts/types'
 import type { UniverseChainId } from 'uniswap/src/features/chains/types'
+import { SwapTradeBaseProperties } from 'uniswap/src/features/telemetry/types'
+import {
+  TransactionDetails,
+  TransactionOptions,
+  TransactionOriginType,
+  TransactionTypeInfo,
+} from 'uniswap/src/features/transactions/types/transactionDetails'
 import type { ExecuteTransactionParams } from 'wallet/src/features/transactions/executeTransaction/executeTransactionSaga'
-import type { TransactionResponse } from 'wallet/src/features/transactions/executeTransaction/services/TransactionSignerService/transactionSignerService'
 import type { CalculatedNonce } from 'wallet/src/features/transactions/executeTransaction/tryGetNonce'
+import { SignedTransactionRequest } from 'wallet/src/features/transactions/executeTransaction/types'
+
+export interface PrepareTransactionParams {
+  chainId: UniverseChainId
+  account: AccountMeta
+  request: providers.TransactionRequest
+  submitViaPrivateRpc: boolean
+}
+
+export interface SubmitTransactionParams {
+  txId?: string
+  chainId: UniverseChainId
+  account: SignerMnemonicAccountMeta
+  request: SignedTransactionRequest
+  options: TransactionOptions
+  typeInfo: TransactionTypeInfo
+  transactionOriginType: TransactionOriginType
+  analytics?: SwapTradeBaseProperties
+}
 
 /**
  * Main transaction service interface
@@ -10,12 +36,43 @@ import type { CalculatedNonce } from 'wallet/src/features/transactions/executeTr
  */
 export interface TransactionService {
   /**
+   * Prepare and sign a transaction
+   * @param input Transaction parameters
+   * @returns The prepared transaction
+   */
+  prepareAndSignTransaction(input: PrepareTransactionParams): Promise<SignedTransactionRequest>
+
+  /**
    * Send a transaction to the blockchain
    * @param input Transaction parameters
    * @returns The transaction response
    */
+  submitTransaction(input: SubmitTransactionParams): Promise<{
+    transactionHash: string
+  }>
+
+  /**
+   * Send a transaction to the blockchain synchronously, using the eth_sendRawTransactionSync method (EIP-7966)
+   *
+   * Use this method when:
+   * - You need immediate confirmation of transaction inclusion
+   * - The RPC provider supports EIP-7966
+   *
+   * Note: This blocks until the transaction is included in a block, which could take several seconds.
+   *
+   * @param input Transaction parameters
+   * @returns The transaction details updated with the receipt
+   */
+  submitTransactionSync(input: SubmitTransactionParams): Promise<TransactionDetails>
+
+  /**
+   * Execute a transaction by preparing, signing, and submitting it
+   * If a pre-signed transaction is provided, it will skip the preparation and signing steps
+   * @param input Transaction parameters
+   * @returns The transaction response
+   */
   executeTransaction(input: ExecuteTransactionParams): Promise<{
-    transactionResponse: TransactionResponse
+    transactionHash: string
   }>
 
   /**

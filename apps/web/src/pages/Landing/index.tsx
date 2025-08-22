@@ -9,6 +9,7 @@ import LandingV2 from 'pages/Landing/LandingV2'
 import { parse } from 'qs'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router'
+import { ExploreContextProvider } from 'state/explore'
 import { TRANSITION_DURATIONS } from 'theme/styles'
 import { useConversionTracking } from 'uniswap/src/data/rest/conversionTracking/useConversionTracking'
 import Trace from 'uniswap/src/features/telemetry/Trace'
@@ -68,11 +69,13 @@ export default function Landing() {
       }
     }, TRANSITION_DURATIONS.fast)
     return () => clearTimeout(timeoutId)
-  }, [account.address, prevAccount, accountDrawer, navigate, queryParams.intro, connector, disconnect])
+  }, [account.address, prevAccount, accountDrawer.isOpen, navigate, queryParams.intro, connector, disconnect])
 
   return (
     <Trace logImpression page={InterfacePageName.LandingPage}>
-      <LandingV2 transition={transition} />
+      <ExploreContextProvider>
+        <LandingV2 transition={transition} />
+      </ExploreContextProvider>
     </Trace>
   )
 }

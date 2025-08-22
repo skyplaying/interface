@@ -1,9 +1,16 @@
 import { useCallback, useMemo } from 'react'
+// only using to keep a consistent timing on interface
+// eslint-disable-next-line @typescript-eslint/no-restricted-imports
+import { ADAPTIVE_MODAL_ANIMATION_DURATION } from 'ui/src/components/modal/AdaptiveWebModal'
 import type { ParsedWarnings } from 'uniswap/src/components/modals/WarningModal/types'
+import { Routing } from 'uniswap/src/data/tradingApi/__generated__'
 import type { AuthTrigger } from 'uniswap/src/features/auth/types'
 import { TransactionScreen } from 'uniswap/src/features/transactions/components/TransactionModal/TransactionModalContext'
 import type { TransactionStep } from 'uniswap/src/features/transactions/steps/types'
+import { shouldShowFlashblocksUI } from 'uniswap/src/features/transactions/swap/components/UnichainInstantBalanceModal/utils'
+import { useIsUnichainFlashblocksEnabled } from 'uniswap/src/features/transactions/swap/hooks/useIsUnichainFlashblocksEnabled'
 import type { GetExecuteSwapService } from 'uniswap/src/features/transactions/swap/services/executeSwapService'
+import { useSwapDependenciesStore } from 'uniswap/src/features/transactions/swap/stores/swapDependenciesStore/useSwapDependenciesStore'
 import type { SwapFormState } from 'uniswap/src/features/transactions/swap/stores/swapFormStore/types'
 import { useSwapTxStore } from 'uniswap/src/features/transactions/swap/stores/swapTxStore/useSwapTxStore'
 import type { SetCurrentStepFn } from 'uniswap/src/features/transactions/swap/types/swapCallback'
@@ -60,13 +67,25 @@ export function useCreateSwapReviewCallbacks(ctx: {
     setSteps,
   } = ctx
 
+  const { derivedSwapInfo } = useSwapDependenciesStore((s) => ({
+    derivedSwapInfo: s.derivedSwapInfo,
+    getExecuteSwapService: s.getExecuteSwapService,
+  }))
+  const chainId = derivedSwapInfo.chainId
+  const isFlashblocksEnabled = useIsUnichainFlashblocksEnabled(chainId)
+
+  const shouldShowConfirmedState =
+    shouldShowFlashblocksUI(derivedSwapInfo.trade.trade?.routing) ||
+    // show the confirmed state for bridges
+    derivedSwapInfo.trade.trade?.routing === Routing.BRIDGE
+
   const onFailure = useCallback(
     (error?: Error, onPressRetry?: () => void) => {
       resetCurrentStep()
 
       // Create a new txId for the next transaction, as the existing one may be used in state to track the failed submission.
       const newTxId = createTransactionId()
-      updateSwapForm({ isSubmitting: false, txId: newTxId, showPendingUI: false })
+      updateSwapForm({ isSubmitting: false, isConfirmed: false, txId: newTxId, showPendingUI: false })
 
       setSubmissionError(error)
       setRetrySwap(() => onPressRetry)
@@ -75,17 +94,47 @@ export function useCreateSwapReviewCallbacks(ctx: {
   )
 
   const onSuccess = useCallback(() => {
+    // For Unichain networks, trigger confirmation and branch to stall+fetch logic (ie handle in component)
+    if (isFlashblocksEnabled && shouldShowConfirmedState) {
+      updateSwapForm({
+        isConfirmed: true,
+        isSubmitting: false,
+        showPendingUI: false,
+      })
+      return
+    }
+
     // On interface, the swap component stays mounted; after swap we reset the form to avoid showing the previous values.
     if (isInterface) {
-      updateSwapForm({ exactAmountFiat: undefined, exactAmountToken: '', isSubmitting: false, showPendingUI: false })
+      updateSwapForm({
+        exactAmountFiat: undefined,
+        exactAmountToken: '',
+        showPendingUI: false,
+        isConfirmed: false,
+        instantReceiptFetchTime: undefined,
+        instantOutputAmountRaw: undefined,
+        txHash: undefined,
+        txHashReceivedTime: undefined,
+      })
+      setTimeout(
+        () =>
+          updateSwapForm({
+            isSubmitting: false,
+          }),
+        ADAPTIVE_MODAL_ANIMATION_DURATION,
+      )
       setScreen(TransactionScreen.Form)
     }
     onClose()
-  }, [setScreen, updateSwapForm, onClose])
+  }, [setScreen, updateSwapForm, onClose, isFlashblocksEnabled, shouldShowConfirmedState])
 
   const onPending = useCallback(() => {
+    // Skip pending UI only for Unichain networks with flashblocks-compatible routes
+    if (isFlashblocksEnabled && shouldShowConfirmedState) {
+      return
+    }
     updateSwapForm({ showPendingUI: true })
-  }, [updateSwapForm])
+  }, [updateSwapForm, isFlashblocksEnabled, shouldShowConfirmedState])
 
   const swapTxContext = useSwapTxStore((s) => s)
 

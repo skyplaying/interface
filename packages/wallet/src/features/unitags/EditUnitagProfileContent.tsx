@@ -15,9 +15,11 @@ import {
 } from 'ui/src'
 import { Pen } from 'ui/src/components/icons'
 import { borderRadii, fonts, iconSizes, imageSizes, spacing } from 'ui/src/theme'
+import { DisplayNameText } from 'uniswap/src/components/accounts/DisplayNameText'
 import { TextInput } from 'uniswap/src/components/input/TextInput'
 import { updateUnitagMetadata } from 'uniswap/src/data/apiClients/unitagsApi/UnitagsApiClient'
 import { useResetUnitagsQueries } from 'uniswap/src/data/apiClients/unitagsApi/useResetUnitagsQueries'
+import { useUnitagsAddressQuery } from 'uniswap/src/data/apiClients/unitagsApi/useUnitagsAddressQuery'
 import { DisplayNameType } from 'uniswap/src/features/accounts/types'
 import { useENS } from 'uniswap/src/features/ens/useENS'
 import { pushNotification } from 'uniswap/src/features/notifications/slice'
@@ -25,7 +27,6 @@ import { AppNotificationType } from 'uniswap/src/features/notifications/types'
 import { UnitagEventName } from 'uniswap/src/features/telemetry/constants'
 import { sendAnalyticsEvent } from 'uniswap/src/features/telemetry/send'
 import { tryUploadAvatar } from 'uniswap/src/features/unitags/avatars'
-import { useUnitagByAddress } from 'uniswap/src/features/unitags/hooks'
 import { ProfileMetadata } from 'uniswap/src/features/unitags/types'
 import { MobileScreens, UnitagScreens } from 'uniswap/src/types/screens/mobile'
 import { shortenAddress } from 'utilities/src/addresses'
@@ -35,7 +36,6 @@ import { isExtension, isMobileApp } from 'utilities/src/platform'
 import { normalizeTwitterUsername } from 'utilities/src/primitives/string'
 import { useBooleanState } from 'utilities/src/react/useBooleanState'
 import { usePreviousWithLayoutEffect } from 'utilities/src/react/usePreviousWithLayoutEffect'
-import { DisplayNameText } from 'wallet/src/components/accounts/DisplayNameText'
 import { useAvatarSelectionHandler } from 'wallet/src/features/unitags/AvatarSelection'
 import { extensionNftModalProps } from 'wallet/src/features/unitags/ChooseNftModal'
 import { ChoosePhotoOptionsModal } from 'wallet/src/features/unitags/ChoosePhotoOptionsModal'
@@ -95,7 +95,9 @@ export function EditUnitagProfileContent({
   const signerManager = useWalletSigners()
   const dispatch = useDispatch()
 
-  const { unitag: retrievedUnitag, loading } = useUnitagByAddress(address)
+  const { data: retrievedUnitag, isLoading: loading } = useUnitagsAddressQuery({
+    params: address ? { address } : undefined,
+  })
   const unitagMetadata = retrievedUnitag?.metadata
 
   const { value: isSaving, setFalse: setIsNotSaving, setTrue: setIsSaving } = useBooleanState(false)

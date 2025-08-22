@@ -4,15 +4,17 @@ import useAccountRiskCheck from 'hooks/useAccountRiskCheck'
 import { PageType, useIsPage } from 'hooks/useIsPage'
 import { PasskeysHelpModalTypeAtom } from 'hooks/usePasskeyAuthWithHelpModal'
 import { useAtomValue } from 'jotai/utils'
+import { useUnitagsAddressQuery } from 'uniswap/src/data/apiClients/unitagsApi/useUnitagsAddressQuery'
 import { ModalName } from 'uniswap/src/features/telemetry/constants'
-import { useUnitagByAddress } from 'uniswap/src/features/unitags/hooks'
 import { shortenAddress } from 'utilities/src/addresses'
 import { isBetaEnv, isDevEnv } from 'utilities/src/environment/env'
 
 export default function TopLevelModals() {
   const isLandingPage = useIsPage(PageType.LANDING)
   const account = useAccount()
-  const { unitag } = useUnitagByAddress(account.address)
+  const { data: unitag } = useUnitagsAddressQuery({
+    params: account.address ? { address: account.address } : undefined,
+  })
   const accountName = unitag?.username
     ? unitag.username + '.uni.eth'
     : account.address
@@ -37,6 +39,7 @@ export default function TopLevelModals() {
         <ModalRenderer modalName={ModalName.UniWalletConnect} />
         <ModalRenderer modalName={ModalName.BlockedAccount} />
         {shouldShowDevFlags && <ModalRenderer modalName={ModalName.DevFlags} />}
+        <ModalRenderer modalName={ModalName.Help} />
         <ModalRenderer modalName={ModalName.OffchainActivity} />
       </>
     )
@@ -56,12 +59,15 @@ export default function TopLevelModals() {
       <ModalRenderer modalName={ModalName.PrivacyPolicy} />
       <ModalRenderer modalName={ModalName.PrivacyChoices} />
       <ModalRenderer modalName={ModalName.FeatureFlags} />
+      <ModalRenderer modalName={ModalName.SolanaPromo} />
       {shouldShowDevFlags && <ModalRenderer modalName={ModalName.DevFlags} />}
       <ModalRenderer modalName={ModalName.AddLiquidity} />
       <ModalRenderer modalName={ModalName.RemoveLiquidity} />
       <ModalRenderer modalName={ModalName.ClaimFee} />
       <ModalRenderer modalName={ModalName.PasskeysHelp} componentProps={{ type: passkeysHelpModalType, accountName }} />
+      <ModalRenderer modalName={ModalName.Help} />
       <ModalRenderer modalName={ModalName.DelegationMismatch} />
+      <ModalRenderer modalName={ModalName.ReceiveCryptoModal} />
     </>
   )
 }

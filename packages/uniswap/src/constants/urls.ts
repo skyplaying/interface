@@ -42,6 +42,7 @@ export const uniswapUrls = {
     batchedSwapsReview: createHelpArticleUrl('36394497329933'),
     cexTransferKorea: createHelpArticleUrl('29425131525901-How-to-transfer-crypto-to-a-Uniswap-Wallet-in-Korea'),
     contractAddressExplainer: createHelpArticleUrl('26757826138637-What-is-a-token-contract-address'),
+    extensionBiometricsEnrollment: createHelpArticleUrl('38225957094541'),
     extensionHelp: createHelpArticleUrl('24458735271181'),
     extensionDappTroubleshooting: createHelpArticleUrl(
       '25811698471565-Connecting-Uniswap-Extension-Beta-to-other-dapps',
@@ -94,6 +95,24 @@ export const uniswapUrls = {
     walletSecurityMeasures: createHelpArticleUrl('28278904584077-Uniswap-Wallet-Security-Measures'),
     whatIsPrivateKey: createHelpArticleUrl('11306371824653-What-is-a-private-key'),
     wethExplainer: createHelpArticleUrl('16015852009997-Why-do-ETH-swaps-involve-converting-to-WETH'),
+  },
+  downloadWalletUrl: 'https://wallet.uniswap.org/',
+  tradingApiDocsUrl: 'https://hub.uniswap.org/',
+  unichainUrl: 'https://www.unichain.org/',
+  uniswapXUrl: 'https://x.uniswap.org/',
+  helpCenterUrl: 'https://help.uniswap.org/',
+  blogUrl: 'https://blog.uniswap.org/',
+  docsUrl: 'https://docs.uniswap.org/',
+  voteUrl: 'https://vote.uniswapfoundation.org',
+  governanceUrl: 'https://uniswap.org/governance',
+  developersUrl: 'https://uniswap.org/developers',
+  aboutUrl: 'https://about.uniswap.org/',
+  careersUrl: 'https://careers.uniswap.org/',
+  social: {
+    x: 'https://x.com/Uniswap',
+    farcaster: 'https://farcaster.xyz/Uniswap',
+    linkedin: 'https://www.linkedin.com/company/uniswaporg',
+    tiktok: 'https://www.tiktok.com/@uniswap',
   },
   termsOfServiceUrl: 'https://uniswap.org/terms-of-service',
   privacyPolicyUrl: 'https://uniswap.org/privacy-policy',
@@ -157,6 +176,12 @@ export const uniswapUrls = {
       encode7702: `${tradingApiVersionPrefix}/wallet/encode_7702`,
     },
     swap7702: `${tradingApiVersionPrefix}/swap_7702`,
+  },
+
+  jupiterApiUrl: 'https://lite-api.jup.ag/ultra/v1',
+  jupiterApiPaths: {
+    order: '/order',
+    execute: '/execute',
   },
 
   // App and Redirect URL's

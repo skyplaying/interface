@@ -1,6 +1,7 @@
 import { ethers } from 'ethers'
 import React, { PropsWithChildren, useCallback, useEffect, useState } from 'react'
 import { UniswapProvider } from 'uniswap/src/contexts/UniswapContext'
+import { getDelegationService } from 'uniswap/src/domains/services'
 import { useEnabledChainsWithConnector } from 'uniswap/src/features/chains/hooks/useEnabledChains'
 import { UniverseChainId } from 'uniswap/src/features/chains/types'
 import { FeatureFlags } from 'uniswap/src/features/gating/flags'
@@ -8,6 +9,11 @@ import { useFeatureFlag } from 'uniswap/src/features/gating/hooks'
 import { useUpdateDelegatedState } from 'uniswap/src/features/smartWallet/delegation/hooks/useUpdateDelegateState'
 import { MismatchContextProvider } from 'uniswap/src/features/smartWallet/mismatch/MismatchContext'
 import { useHasAccountMismatchCallback } from 'uniswap/src/features/smartWallet/mismatch/hooks'
+import type {
+  HasMismatchInput,
+  HasMismatchResult,
+  HasMismatchUtil,
+} from 'uniswap/src/features/smartWallet/mismatch/mismatch'
 import { createHasMismatchUtil } from 'uniswap/src/features/smartWallet/mismatch/mismatch'
 import { useGetCanSignPermits } from 'uniswap/src/features/transactions/hooks/useGetCanSignPermits'
 import { prepareSwapFormState } from 'uniswap/src/features/transactions/types/transactionState'
@@ -18,10 +24,9 @@ import {
   WalletDelegationProvider,
   useGetSwapDelegationInfoForActiveAccount,
 } from 'wallet/src/features/smartWallet/WalletDelegationProvider'
-import { getDelegationService } from 'wallet/src/features/smartWallet/delegation'
 import { useShowSwapNetworkNotification } from 'wallet/src/features/transactions/swap/hooks/useShowSwapNetworkNotification'
 import { useProvider, useWalletSigners } from 'wallet/src/features/wallet/context'
-import { useActiveAccount, useActiveSignerAccount } from 'wallet/src/features/wallet/hooks'
+import { useActiveAccount, useActiveSignerAccount, useDisplayName } from 'wallet/src/features/wallet/hooks'
 import { NativeSigner } from 'wallet/src/features/wallet/signing/NativeSigner'
 
 // Adapts useProvider to fit uniswap context requirement of returning undefined instead of null
@@ -64,6 +69,7 @@ function WalletUniswapProviderInner({ children }: PropsWithChildren): JSX.Elemen
   const signer = useWalletSigner()
   const {
     navigateToTokenDetails,
+    navigateToNftDetails,
     navigateToBuyOrReceiveWithEmptyWallet,
     navigateToFiatOnRamp,
     navigateToSwapFlow,
@@ -109,11 +115,13 @@ function WalletUniswapProviderInner({ children }: PropsWithChildren): JSX.Elemen
       navigateToReceive={navigateToReceive}
       navigateToTokenDetails={navigateToTokenDetails}
       navigateToExternalProfile={navigateToExternalProfile}
+      navigateToNftDetails={navigateToNftDetails}
       navigateToNftCollection={navigateToNftCollection}
       navigateToPoolDetails={navigateToPoolDetails}
       handleShareToken={handleShareToken}
       signer={signer}
       useProviderHook={useWalletProvider}
+      useWalletDisplayName={useDisplayName}
       getIsUniswapXSupported={getIsUniswapXSupported}
       getCanSignPermits={getCanSignPermits}
       getSwapDelegationInfo={getSwapDelegationInfo}
@@ -154,10 +162,10 @@ const MismatchContextWrapper = React.memo(function MismatchContextWrapper({
 
 MismatchContextWrapper.displayName = 'MismatchContextWrapper'
 
-function useMismatchCallback(): (input: { chainId: UniverseChainId; address: string }) => Promise<boolean> {
+function useMismatchCallback(): HasMismatchUtil {
   const updateDelegatedState = useUpdateDelegatedState()
   return useEvent(
-    async (input: { chainId: UniverseChainId; address: string }): Promise<boolean> =>
+    async (input: HasMismatchInput): HasMismatchResult =>
       createHasMismatchUtil({
         logger: getLogger(),
         delegationService: getDelegationService({

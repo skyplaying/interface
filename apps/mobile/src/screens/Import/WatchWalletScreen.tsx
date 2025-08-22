@@ -13,7 +13,7 @@ import { Button, Flex, Text } from 'ui/src'
 import { Eye, GraduationCap } from 'ui/src/components/icons'
 import { useIsSmartContractAddress } from 'uniswap/src/features/address/useIsSmartContractAddress'
 import { useEnabledChains } from 'uniswap/src/features/chains/hooks/useEnabledChains'
-import { usePortfolioBalances } from 'uniswap/src/features/dataApi/balances'
+import { usePortfolioBalances } from 'uniswap/src/features/dataApi/balances/balances'
 import { ENS_SUFFIX } from 'uniswap/src/features/ens/constants'
 import { useENS } from 'uniswap/src/features/ens/useENS'
 import { Platform } from 'uniswap/src/features/platforms/types/Platform'
@@ -114,7 +114,15 @@ export function WatchWalletScreen({ navigation, route: { params } }: Props): JSX
 
   const walletExists = Object.keys(initialAccounts.current).some(
     (accountAddress) =>
-      areAddressesEqual(accountAddress, resolvedAddress) || areAddressesEqual(accountAddress, validAddress),
+      // TODO(WALL-7065): Update to support solana
+      areAddressesEqual({
+        addressInput1: { address: accountAddress, platform: Platform.EVM },
+        addressInput2: { address: resolvedAddress, platform: Platform.EVM },
+      }) ||
+      areAddressesEqual({
+        addressInput1: { address: accountAddress, platform: Platform.EVM },
+        addressInput2: { address: validAddress, platform: Platform.EVM },
+      }),
   )
 
   // Form validation.

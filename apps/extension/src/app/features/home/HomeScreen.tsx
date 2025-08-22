@@ -20,6 +20,7 @@ import { HomeQueryParams, HomeTabs } from 'src/app/navigation/constants'
 import { navigate } from 'src/app/navigation/state'
 import { Flex, Loader, Text, TouchableArea, styled } from 'ui/src'
 import { SMART_WALLET_UPGRADE_VIDEO } from 'ui/src/assets'
+import { NFTS_TAB_DATA_DEPENDENCIES } from 'uniswap/src/components/nfts/NftsList'
 import { FeatureFlags } from 'uniswap/src/features/gating/flags'
 import { useFeatureFlag } from 'uniswap/src/features/gating/hooks'
 import { useSelectAddressHasNotifications } from 'uniswap/src/features/notifications/hooks'
@@ -30,14 +31,12 @@ import { logger } from 'utilities/src/logger/logger'
 import { useEvent } from 'utilities/src/react/hooks'
 import { ONE_MINUTE_MS, ONE_SECOND_MS } from 'utilities/src/time/time'
 import { useTimeout } from 'utilities/src/time/timing'
-import { NFTS_TAB_DATA_DEPENDENCIES } from 'wallet/src/components/nfts/NftsList'
 import { SmartWalletEnabledModal } from 'wallet/src/components/smartWallet/modals/SmartWalletEnabledModal'
 import { SmartWalletUpgradeModals } from 'wallet/src/components/smartWallet/modals/SmartWalletUpgradeModal'
-import { useOpenSmartWalletNudgeOnCompletedSwap } from 'wallet/src/components/smartWallet/smartAccounts/hook'
+import { useOpenSmartWalletNudgeOnCompletedSwap } from 'wallet/src/components/smartWallet/smartAccounts/hooks'
 import { setIncrementNumPostSwapNudge } from 'wallet/src/features/behaviorHistory/slice'
 import { PendingNotificationBadge } from 'wallet/src/features/notifications/components/PendingNotificationBadge'
 import { PortfolioBalance } from 'wallet/src/features/portfolio/PortfolioBalance'
-import { useHeartbeatReporter, useLastBalancesReporter } from 'wallet/src/features/telemetry/hooks'
 import { useActiveAccountAddressWithThrow, useActiveAccountWithThrow } from 'wallet/src/features/wallet/hooks'
 import { setSmartWalletConsent } from 'wallet/src/features/wallet/slice'
 
@@ -74,11 +73,6 @@ export const HomeScreen = memo(function _HomeScreen(): JSX.Element {
   const [isSmartWalletEnabledModalOpen, setIsSmartWalletEnabledModalOpen] = useState(false)
   const dispatch = useDispatch()
 
-  // Record a heartbeat for anonymous user DAU
-  useHeartbeatReporter()
-  // Report balances at most every 24 hours, checking every 15 seconds when app is open
-  useLastBalancesReporter()
-
   useEffect(() => {
     if (selectedTab) {
       sendAnalyticsEvent(SharedEventName.PAGE_VIEWED, {
@@ -101,7 +95,7 @@ export const HomeScreen = memo(function _HomeScreen(): JSX.Element {
   )
 
   // Handle the smart wallet nudge when a swap transaction is completed
-  const { openModal } = useSmartWalletNudges()
+  const { openModal, activeModal } = useSmartWalletNudges()
   useOpenSmartWalletNudgeOnCompletedSwap(
     useEvent(() => {
       if (!activeAccount.address) {
@@ -250,7 +244,7 @@ export const HomeScreen = memo(function _HomeScreen(): JSX.Element {
         </Text>
       )}
       {appRatingModalVisible && <AppRatingModal onClose={onAppRatingModalClose} />}
-      {isSmartWalletEnabled && (
+      {isSmartWalletEnabled && !activeModal && (
         <SmartWalletUpgradeModals
           account={activeAccount}
           video={<MemoizedVideo />}

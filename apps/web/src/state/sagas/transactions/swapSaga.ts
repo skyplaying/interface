@@ -1,7 +1,7 @@
 import { useTotalBalancesUsdForAnalytics } from 'appGraphql/data/apollo/useTotalBalancesUsdForAnalytics'
 import { popupRegistry } from 'components/Popups/registry'
 import { PopupType } from 'components/Popups/types'
-import { ZERO_PERCENT } from 'constants/misc'
+import { DEFAULT_TXN_DISMISS_MS, L2_TXN_DISMISS_MS, ZERO_PERCENT } from 'constants/misc'
 import { useAccount } from 'hooks/useAccount'
 import useSelectChain from 'hooks/useSelectChain'
 import { formatSwapSignedAnalyticsEventProperties } from 'lib/utils/analytics'
@@ -10,6 +10,7 @@ import { useCallback } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
 import { handleAtomicSendCalls } from 'state/sagas/transactions/5792'
 import { useGetOnPressRetry } from 'state/sagas/transactions/retry'
+import { jupiterSwap } from 'state/sagas/transactions/solana'
 import { handleUniswapXSignatureStep } from 'state/sagas/transactions/uniswapx'
 import {
   HandleOnChainStepParams,
@@ -24,8 +25,9 @@ import { VitalTxFields } from 'state/transactions/types'
 import invariant from 'tiny-invariant'
 import { call } from 'typed-redux-saga'
 import { Routing } from 'uniswap/src/data/tradingApi/__generated__/index'
-import { SignerMnemonicAccountMeta } from 'uniswap/src/features/accounts/types'
+import { isL2ChainId } from 'uniswap/src/features/chains/utils'
 import { useLocalizationContext } from 'uniswap/src/features/language/LocalizationContext'
+import { isSVMChain } from 'uniswap/src/features/platforms/utils/chains'
 import { SwapEventName } from 'uniswap/src/features/telemetry/constants'
 import { sendAnalyticsEvent } from 'uniswap/src/features/telemetry/send'
 import { SwapTradeBaseProperties } from 'uniswap/src/features/telemetry/types'
@@ -34,29 +36,31 @@ import { updateSwapStartTimestamp } from 'uniswap/src/features/timing/slice'
 import { UnexpectedTransactionStateError } from 'uniswap/src/features/transactions/errors'
 import { TransactionStep, TransactionStepType } from 'uniswap/src/features/transactions/steps/types'
 import { getBaseTradeAnalyticsProperties } from 'uniswap/src/features/transactions/swap/analytics'
+import { FLASHBLOCKS_UI_SKIP_ROUTES } from 'uniswap/src/features/transactions/swap/components/UnichainInstantBalanceModal/constants'
+import { getIsFlashblocksEnabled } from 'uniswap/src/features/transactions/swap/hooks/useIsUnichainFlashblocksEnabled'
 import { useV4SwapEnabled } from 'uniswap/src/features/transactions/swap/hooks/useV4SwapEnabled'
 import {
   SwapTransactionStep,
   SwapTransactionStepAsync,
   SwapTransactionStepBatched,
 } from 'uniswap/src/features/transactions/swap/steps/swap'
+import { useSwapFormStore } from 'uniswap/src/features/transactions/swap/stores/swapFormStore/useSwapFormStore'
 import {
   SetCurrentStepFn,
   SwapCallback,
   SwapCallbackParams,
 } from 'uniswap/src/features/transactions/swap/types/swapCallback'
-import {
-  PermitMethod,
-  ValidatedBridgeSwapTxAndGasInfo,
-  ValidatedClassicSwapTxAndGasInfo,
-  ValidatedSwapTxContext,
-  ValidatedUniswapXSwapTxAndGasInfo,
-} from 'uniswap/src/features/transactions/swap/types/swapTxAndGasInfo'
+import { PermitMethod, ValidatedSwapTxContext } from 'uniswap/src/features/transactions/swap/types/swapTxAndGasInfo'
 import { BridgeTrade, ClassicTrade } from 'uniswap/src/features/transactions/swap/types/trade'
 import { slippageToleranceToPercent } from 'uniswap/src/features/transactions/swap/utils/format'
 import { generateSwapTransactionSteps } from 'uniswap/src/features/transactions/swap/utils/generateSwapTransactionSteps'
-import { isClassic } from 'uniswap/src/features/transactions/swap/utils/routing'
+import { UNISWAPX_ROUTING_VARIANTS, isClassic, isJupiter } from 'uniswap/src/features/transactions/swap/utils/routing'
 import { getClassicQuoteFromResponse } from 'uniswap/src/features/transactions/swap/utils/tradingApi'
+import { useWallet } from 'uniswap/src/features/wallet/hooks/useWallet'
+import {
+  SignerMnemonicAccountDetails,
+  isSignerMnemonicAccountDetails,
+} from 'uniswap/src/features/wallet/types/AccountDetails'
 import { createSaga } from 'uniswap/src/utils/saga'
 import { logger } from 'utilities/src/logger/logger'
 import { useTrace } from 'utilities/src/telemetry/trace/TraceContext'
@@ -66,16 +70,10 @@ interface HandleSwapStepParams extends Omit<HandleOnChainStepParams, 'step' | 'i
   signature?: string
   trade: ClassicTrade | BridgeTrade
   analytics: SwapTradeBaseProperties
-}
-
-interface HandleSwapStepParams extends Omit<HandleOnChainStepParams, 'step' | 'info'> {
-  step: SwapTransactionStep | SwapTransactionStepAsync
-  signature?: string
-  trade: ClassicTrade | BridgeTrade
-  analytics: SwapTradeBaseProperties
+  onTransactionHash?: (hash: string) => void
 }
 function* handleSwapTransactionStep(params: HandleSwapStepParams) {
-  const { trade, step, signature, analytics } = params
+  const { trade, step, signature, analytics, onTransactionHash } = params
 
   const info = getSwapTransactionInfo(trade)
   const txRequest = yield* call(getSwapTxRequest, step, signature)
@@ -102,7 +100,21 @@ function* handleSwapTransactionStep(params: HandleSwapStepParams) {
 
   handleSwapTransactionAnalytics({ ...params, hash })
 
-  popupRegistry.addPopup({ type: PopupType.Transaction, hash }, hash)
+  if (
+    !getIsFlashblocksEnabled(trade.inputAmount.currency.chainId) ||
+    FLASHBLOCKS_UI_SKIP_ROUTES.includes(trade.routing)
+  ) {
+    popupRegistry.addPopup(
+      { type: PopupType.Transaction, hash },
+      hash,
+      isL2ChainId(trade.inputAmount.currency.chainId) ? L2_TXN_DISMISS_MS : DEFAULT_TXN_DISMISS_MS,
+    )
+  }
+
+  // Update swap form store with actual transaction hash
+  if (onTransactionHash) {
+    onTransactionHash(hash)
+  }
 
   return
 }
@@ -179,7 +191,7 @@ function* getSwapTxRequest(step: SwapTransactionStep | SwapTransactionStepAsync,
 type SwapParams = {
   selectChain: (chainId: number) => Promise<boolean>
   startChainId?: number
-  account: SignerMnemonicAccountMeta
+  account: SignerMnemonicAccountDetails
   analytics: SwapTradeBaseProperties
   swapTxContext: ValidatedSwapTxContext
   setCurrentStep: SetCurrentStepFn
@@ -189,63 +201,70 @@ type SwapParams = {
   disableOneClickSwap: () => void
   onSuccess: () => void
   onFailure: (error?: Error, onPressRetry?: () => void) => void
+  onTransactionHash?: (hash: string) => void
   v4Enabled: boolean
 }
 
-// eslint-disable-next-line consistent-return
-function* swap(params: SwapParams) {
-  const { swapTxContext, setSteps, selectChain, startChainId, v4Enabled, onFailure } = params
-
-  try {
-    const steps = yield* call(generateSwapTransactionSteps, swapTxContext, v4Enabled)
-    setSteps(steps)
-
-    // Switch chains if needed
-    const swapChainId = swapTxContext.trade.inputAmount.currency.chainId
-    if (swapChainId !== startChainId) {
-      const chainSwitched = yield* call(selectChain, swapChainId)
-      if (!chainSwitched) {
-        onFailure()
-        return undefined
-      }
-    }
-
-    switch (swapTxContext.routing) {
-      case Routing.CLASSIC:
-      case Routing.BRIDGE:
-        return yield* classicSwap({ ...params, swapTxContext, steps })
-      case Routing.DUTCH_V2:
-      case Routing.DUTCH_V3:
-      case Routing.PRIORITY:
-        return yield* uniswapXSwap({ ...params, swapTxContext, steps })
-    }
-  } catch (error) {
-    logger.error(error, { tags: { file: 'swapSaga', function: 'swap' } })
-    onFailure(error)
+/** Asserts that a given object fits a given routing variant. */
+function requireRouting<T extends Routing, V extends { routing: Routing }>(
+  val: V,
+  routing: readonly T[],
+): asserts val is V & { routing: T } {
+  if (!routing.includes(val.routing as T)) {
+    throw new UnexpectedTransactionStateError(`Expected routing ${routing}, got ${val.routing}`)
   }
 }
 
-function* classicSwap(
-  params: SwapParams & {
-    swapTxContext: ValidatedClassicSwapTxAndGasInfo | ValidatedBridgeSwapTxAndGasInfo
-    steps: TransactionStep[]
-  },
-) {
+/** Switches to the proper chain, if needed. If a chain switch is necessary and it fails, returns success=false. */
+async function handleSwitchChains(
+  params: Pick<SwapParams, 'selectChain' | 'startChainId' | 'swapTxContext'>,
+): Promise<{ chainSwitchFailed: boolean }> {
+  const { selectChain, startChainId, swapTxContext } = params
+
+  const swapChainId = swapTxContext.trade.inputAmount.currency.chainId
+  if (isJupiter(swapTxContext) || swapChainId === startChainId) {
+    return { chainSwitchFailed: false }
+  }
+
+  const chainSwitched = await selectChain(swapChainId)
+  return { chainSwitchFailed: !chainSwitched }
+}
+
+function* swap(params: SwapParams) {
   const {
     account,
     disableOneClickSwap,
     setCurrentStep,
-    steps,
-    swapTxContext: { trade },
+    swapTxContext,
     analytics,
     onSuccess,
     onFailure,
+    v4Enabled,
+    setSteps,
   } = params
+  const { trade } = swapTxContext
+
+  const { chainSwitchFailed } = yield* call(handleSwitchChains, params)
+  if (chainSwitchFailed) {
+    onFailure()
+    return
+  }
+
+  const steps = yield* call(generateSwapTransactionSteps, swapTxContext, v4Enabled)
+  setSteps(steps)
 
   let signature: string | undefined
+  let step: TransactionStep | undefined
 
-  for (const step of steps) {
-    try {
+  try {
+    // TODO(SWAP-287): Integrate jupiter swap into TransactionStep, rather than special-casing.
+    if (isJupiter(swapTxContext)) {
+      yield* call(jupiterSwap, { ...params, swapTxContext })
+      yield* call(onSuccess)
+      return
+    }
+
+    for (step of steps) {
       switch (step.type) {
         case TransactionStepType.TokenRevocationTransaction:
         case TransactionStepType.TokenApprovalTransaction: {
@@ -262,10 +281,20 @@ function* classicSwap(
         }
         case TransactionStepType.SwapTransaction:
         case TransactionStepType.SwapTransactionAsync: {
-          yield* call(handleSwapTransactionStep, { account, signature, step, setCurrentStep, trade, analytics })
+          requireRouting(trade, [Routing.CLASSIC, Routing.BRIDGE])
+          yield* call(handleSwapTransactionStep, {
+            account,
+            signature,
+            step,
+            setCurrentStep,
+            trade,
+            analytics,
+            onTransactionHash: params.onTransactionHash,
+          })
           break
         }
         case TransactionStepType.SwapTransactionBatched: {
+          requireRouting(trade, [Routing.CLASSIC, Routing.BRIDGE])
           yield* call(handleSwapTransactionBatchedStep, {
             account,
             step,
@@ -276,50 +305,8 @@ function* classicSwap(
           })
           break
         }
-        default: {
-          throw new UnexpectedTransactionStateError(`Unexpected step type: ${step.type}`)
-        }
-      }
-    } catch (error) {
-      const displayableError = getDisplayableError({ error, step })
-      if (displayableError) {
-        logger.error(displayableError, { tags: { file: 'swapSaga', function: 'classicSwap' } })
-      }
-      const onPressRetry = params.getOnPressRetry(displayableError)
-      onFailure(displayableError, onPressRetry)
-      return
-    }
-  }
-
-  yield* call(onSuccess)
-}
-
-function* uniswapXSwap(
-  params: SwapParams & {
-    swapTxContext: ValidatedUniswapXSwapTxAndGasInfo
-    steps: TransactionStep[]
-    analytics: SwapTradeBaseProperties
-  },
-) {
-  const {
-    account,
-    setCurrentStep,
-    steps,
-    swapTxContext: { trade },
-    analytics,
-    onFailure,
-    onSuccess,
-  } = params
-
-  for (const step of steps) {
-    try {
-      switch (step.type) {
-        case TransactionStepType.TokenRevocationTransaction:
-        case TransactionStepType.TokenApprovalTransaction: {
-          yield* call(handleApprovalTransactionStep, { account, step, setCurrentStep })
-          break
-        }
         case TransactionStepType.UniswapXSignature: {
+          requireRouting(trade, UNISWAPX_ROUTING_VARIANTS)
           yield* call(handleUniswapXSignatureStep, { account, step, setCurrentStep, trade, analytics })
           break
         }
@@ -327,14 +314,15 @@ function* uniswapXSwap(
           throw new UnexpectedTransactionStateError(`Unexpected step type: ${step.type}`)
         }
       }
-    } catch (error) {
-      const displayableError = getDisplayableError({ error, step })
-      if (displayableError) {
-        logger.error(displayableError, { tags: { file: 'swapSaga', function: 'uniswapXSwap' } })
-      }
-      onFailure(displayableError)
-      return
     }
+  } catch (error) {
+    const displayableError = getDisplayableError({ error, step })
+    if (displayableError) {
+      logger.error(displayableError, { tags: { file: 'swapSaga', function: 'swap' } })
+    }
+    const onPressRetry = params.getOnPressRetry(displayableError)
+    onFailure(displayableError, onPressRetry)
+    return
   }
 
   yield* call(onSuccess)
@@ -352,16 +340,17 @@ export function useSwapCallback(): SwapCallback {
   const startChainId = connectedAccount.chainId
   const v4SwapEnabled = useV4SwapEnabled(startChainId)
   const trace = useTrace()
+  const updateSwapForm = useSwapFormStore((s) => s.updateSwapForm)
 
   const portfolioBalanceUsd = useTotalBalancesUsdForAnalytics()
 
   const disableOneClickSwap = useSetOverrideOneClickSwapFlag()
   const getOnPressRetry = useGetOnPressRetry()
+  const wallet = useWallet()
 
   return useCallback(
     (args: SwapCallbackParams) => {
       const {
-        account,
         swapTxContext,
         onSuccess,
         onFailure,
@@ -393,6 +382,12 @@ export function useSwapCallback(): SwapCallback {
         includedPermitTransactionStep,
       })
 
+      const account = isSVMChain(trade.inputAmount.currency.chainId) ? wallet.svmAccount : wallet.evmAccount
+
+      if (!account || !isSignerMnemonicAccountDetails(account)) {
+        throw new Error('No account found')
+      }
+
       const swapParams = {
         swapTxContext,
         account,
@@ -406,6 +401,9 @@ export function useSwapCallback(): SwapCallback {
         selectChain,
         startChainId,
         v4Enabled: v4SwapEnabled,
+        onTransactionHash: (hash: string): void => {
+          updateSwapForm({ txHash: hash, txHashReceivedTime: Date.now() })
+        },
       }
       appDispatch(swapSaga.actions.trigger(swapParams))
 
@@ -436,6 +434,9 @@ export function useSwapCallback(): SwapCallback {
       swapStartTimestamp,
       getOnPressRetry,
       disableOneClickSwap,
+      wallet.evmAccount,
+      wallet.svmAccount,
+      updateSwapForm,
     ],
   )
 }

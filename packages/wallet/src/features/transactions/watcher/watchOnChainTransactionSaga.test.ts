@@ -21,6 +21,20 @@ import {
 } from 'wallet/src/features/transactions/watcher/watchOnChainTransactionSaga'
 import { getProvider } from 'wallet/src/features/wallet/context'
 
+let mockGates: Record<string, boolean> = {}
+
+jest.mock('uniswap/src/features/gating/sdk/statsig', () => ({
+  getStatsigClient: jest.fn(() => ({
+    checkGate: jest.fn((gate: string) => mockGates[gate] ?? false),
+    getDynamicConfig: jest.fn(() => ({
+      get: jest.fn(() => undefined),
+    })),
+    getLayer: jest.fn(() => ({
+      get: jest.fn(() => false),
+    })),
+  })),
+}))
+
 const ACTIVE_ACCOUNT_ADDRESS = '0x000000000000000000000000000000000000000001'
 const {
   ethersTxReceipt,
@@ -38,9 +52,15 @@ describe(watchTransaction, () => {
       return null
     }),
   }
+
+  beforeEach(() => {
+    mockGates = {}
+  })
+
   beforeAll(() => {
     dateNowSpy = jest.spyOn(Date, 'now').mockImplementation(() => txReceipt.confirmedTime)
   })
+
   afterAll(() => {
     dateNowSpy.mockRestore()
   })

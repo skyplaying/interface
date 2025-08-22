@@ -1,25 +1,26 @@
 import { useAccountDrawer } from 'components/AccountDrawer/MiniPortfolio/hooks'
-import { ModalState, miniPortfolioModalStateAtom } from 'components/AccountDrawer/constants'
 import { SwitchNetworkAction } from 'components/Popups/types'
+import { ReceiveModalState, receiveCryptoModalStateAtom } from 'components/ReceiveCryptoModal/state'
 import { useAccount } from 'hooks/useAccount'
 import { useEthersProvider } from 'hooks/useEthersProvider'
 import { useEthersSigner } from 'hooks/useEthersSigner'
 import { useModalState } from 'hooks/useModalState'
 import { useUpdateAtom } from 'jotai/utils'
 import { useOneClickSwapSetting } from 'pages/Swap/settings/OneClickSwap'
-import React, { PropsWithChildren, useCallback, useEffect, useMemo } from 'react'
+import React, { PropsWithChildren, useCallback, useEffect } from 'react'
 import { useSelector } from 'react-redux'
 import { useNavigate } from 'react-router'
 import { serializeSwapAddressesToURLParameters } from 'state/swap/hooks'
 import { useIsAtomicBatchingSupportedByChainIdCallback } from 'state/walletCapabilities/hooks/useIsAtomicBatchingSupportedByChain'
 import { useHasMismatchCallback, useShowMismatchToast } from 'state/walletCapabilities/hooks/useMismatchAccount'
 import { UniswapProvider } from 'uniswap/src/contexts/UniswapContext'
-import { AccountMeta, AccountType } from 'uniswap/src/features/accounts/types'
+import { useOnchainDisplayName } from 'uniswap/src/features/accounts/useOnchainDisplayName'
 import { getChainInfo } from 'uniswap/src/features/chains/chainInfo'
 import { useEnabledChainsWithConnector } from 'uniswap/src/features/chains/hooks/useEnabledChains'
 import { UniverseChainId } from 'uniswap/src/features/chains/types'
 import { FeatureFlags } from 'uniswap/src/features/gating/flags'
 import { useFeatureFlag } from 'uniswap/src/features/gating/hooks'
+import { useNavigateToNftExplorerLink } from 'uniswap/src/features/nfts/hooks/useNavigateToNftExplorerLink'
 import { useSetActiveChainId } from 'uniswap/src/features/smartWallet/delegation/hooks/useSetActiveChainId'
 import { DelegatedState } from 'uniswap/src/features/smartWallet/delegation/types'
 import { MismatchContextProvider } from 'uniswap/src/features/smartWallet/mismatch/MismatchContext'
@@ -31,32 +32,10 @@ import { getPoolDetailsURL, getTokenDetailsURL } from 'uniswap/src/utils/linking
 import { useEvent, usePrevious } from 'utilities/src/react/hooks'
 import noop from 'utilities/src/react/noop'
 import { showSwitchNetworkNotification } from 'utils/showSwitchNetworkNotification'
-import { Connector } from 'wagmi'
 
 // Adapts useEthersProvider to fit uniswap context hook shape
 function useWebProvider(chainId: number) {
   return useEthersProvider({ chainId })
-}
-
-function useWagmiAccount(): { account?: AccountMeta; connector?: Connector } {
-  const account = useAccount()
-
-  return useMemo(() => {
-    if (!account.address) {
-      return {
-        account: undefined,
-        connector: account.connector,
-      }
-    }
-
-    return {
-      account: {
-        address: account.address,
-        type: AccountType.SignerMnemonic,
-      },
-      connector: account.connector,
-    }
-  }, [account.address, account.connector])
 }
 
 export function WebUniswapProvider({ children }: PropsWithChildren): JSX.Element {
@@ -69,7 +48,7 @@ export function WebUniswapProvider({ children }: PropsWithChildren): JSX.Element
 
 // Abstracts web-specific transaction flow objects for usage in cross-platform flows in the `uniswap` package.
 function WebUniswapProviderInner({ children }: PropsWithChildren) {
-  const { connector } = useWagmiAccount()
+  const { connector } = useAccount()
   const signer = useEthersSigner()
   const accountDrawer = useAccountDrawer()
   const navigate = useNavigate()
@@ -109,8 +88,8 @@ function WebUniswapProviderInner({ children }: PropsWithChildren) {
     [navigate, closeSearchModal],
   )
 
-  const setReceiveModalState = useUpdateAtom(miniPortfolioModalStateAtom)
-  const navigateToReceive = useCallback(() => setReceiveModalState(ModalState.QR_CODE), [setReceiveModalState])
+  const setReceiveModalState = useUpdateAtom(receiveCryptoModalStateAtom)
+  const navigateToReceive = useCallback(() => setReceiveModalState(ReceiveModalState.DEFAULT), [setReceiveModalState])
 
   // no-op until we have a share token screen on web
   const handleShareToken = useCallback((_: { currencyId: string }) => {
@@ -184,6 +163,7 @@ function WebUniswapProviderInner({ children }: PropsWithChildren) {
       showSwitchNetworkNotification({ chainId, outputChainId, prevChainId, action: SwitchNetworkAction.Swap })
     },
   )
+  const navigateToNftDetails = useNavigateToNftExplorerLink()
 
   useAccountChainIdEffect()
 
@@ -192,6 +172,7 @@ function WebUniswapProviderInner({ children }: PropsWithChildren) {
       signer={signer}
       connector={connector}
       useProviderHook={useWebProvider}
+      useWalletDisplayName={useOnchainDisplayName}
       onSwapChainsChanged={onSwapChainsChanged}
       navigateToFiatOnRamp={navigateToFiatOnRamp}
       navigateToSwapFlow={navigateToSwapFlow}
@@ -200,6 +181,7 @@ function WebUniswapProviderInner({ children }: PropsWithChildren) {
       navigateToTokenDetails={navigateToTokenDetails}
       navigateToExternalProfile={navigateToExternalProfile}
       navigateToNftCollection={navigateToNftCollection}
+      navigateToNftDetails={navigateToNftDetails}
       navigateToPoolDetails={navigateToPoolDetails}
       handleShareToken={handleShareToken}
       onConnectWallet={accountDrawer.open}

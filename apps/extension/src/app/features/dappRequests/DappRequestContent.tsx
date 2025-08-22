@@ -1,8 +1,10 @@
 import { PropsWithChildren } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Animated } from 'react-native'
+import { useDispatch } from 'react-redux'
 import { useDappLastChainId } from 'src/app/features/dapp/hooks'
 import { useDappRequestQueueContext } from 'src/app/features/dappRequests/DappRequestQueueContext'
+import { handleExternallySubmittedUniswapXOrder } from 'src/app/features/dappRequests/handleUniswapX'
 import { useIsDappRequestConfirming } from 'src/app/features/dappRequests/hooks'
 import { DappRequestStoreItem } from 'src/app/features/dappRequests/shared'
 import {
@@ -23,6 +25,7 @@ import {
 } from 'ui/src'
 import { Verified } from 'ui/src/components/icons'
 import { borderRadii, iconSizes } from 'ui/src/theme'
+import { DappIconPlaceholder } from 'uniswap/src/components/dapps/DappIconPlaceholder'
 import { UNISWAP_WEB_HOSTNAME } from 'uniswap/src/constants/urls'
 import { useEnabledChains } from 'uniswap/src/features/chains/hooks/useEnabledChains'
 import { UniverseChainId } from 'uniswap/src/features/chains/types'
@@ -35,9 +38,8 @@ import { extractNameFromUrl } from 'utilities/src/format/extractNameFromUrl'
 import { formatDappURL } from 'utilities/src/format/urls'
 import { logger } from 'utilities/src/logger/logger'
 import { useEvent } from 'utilities/src/react/hooks'
-import { useDebouncedCallback } from 'utilities/src/react/useDebouncedCallback'
+import { useThrottledCallback } from 'utilities/src/react/useThrottledCallback'
 import { MAX_HIDDEN_CALLS_BY_DEFAULT } from 'wallet/src/components/BatchedTransactions/BatchedTransactionDetails'
-import { DappIconPlaceholder } from 'wallet/src/components/WalletConnect/DappIconPlaceholder'
 import { WarningBox } from 'wallet/src/components/WarningBox/WarningBox'
 import { AddressFooter } from 'wallet/src/features/transactions/TransactionRequest/AddressFooter'
 import { NetworkFeeFooter } from 'wallet/src/features/transactions/TransactionRequest/NetworkFeeFooter'
@@ -195,6 +197,7 @@ function DappRequestFooter({
   disableConfirm,
 }: DappRequestFooterProps): JSX.Element {
   const { t } = useTranslation()
+  const dispatch = useDispatch()
   const activeAccount = useActiveAccountWithThrow()
   const { defaultChainId } = useEnabledChains()
   const {
@@ -241,7 +244,10 @@ function DappRequestFooter({
     if (onConfirm) {
       onConfirm()
     } else {
-      await defaultOnConfirm(request)
+      await defaultOnConfirm({ request })
+      if (isUniswapX) {
+        await handleExternallySubmittedUniswapXOrder(activeAccount.address, dispatch)
+      }
     }
 
     if (maybeCloseOnConfirm && shouldCloseSidebar) {
@@ -250,7 +256,7 @@ function DappRequestFooter({
   })
 
   // This is strictly a UI debounce to prevent submitting the same confirmation multiple times.
-  const [debouncedHandleOnConfirm, isConfirming] = useDebouncedCallback(handleOnConfirm)
+  const [debouncedHandleOnConfirm, isConfirming] = useThrottledCallback(handleOnConfirm)
 
   const handleOnCancel = useEvent(async () => {
     if (onCancel) {

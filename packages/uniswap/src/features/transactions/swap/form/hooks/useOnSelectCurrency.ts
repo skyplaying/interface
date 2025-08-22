@@ -6,7 +6,7 @@ import { getSwappableTokensQueryData } from 'uniswap/src/data/apiClients/trading
 import type { ChainId, GetSwappableTokensResponse } from 'uniswap/src/data/tradingApi/__generated__'
 import type { TradeableAsset } from 'uniswap/src/entities/assets'
 import { AssetType } from 'uniswap/src/entities/assets'
-import { useTokenProjects } from 'uniswap/src/features/dataApi/tokenProjects'
+import { useTokenProjects } from 'uniswap/src/features/dataApi/tokenProjects/tokenProjects'
 import { useTransactionModalContext } from 'uniswap/src/features/transactions/components/TransactionModal/TransactionModalContext'
 import { getShouldResetExactAmountToken } from 'uniswap/src/features/transactions/swap/form/utils'
 import type { SwapFormState } from 'uniswap/src/features/transactions/swap/stores/swapFormStore/types'
@@ -15,6 +15,7 @@ import { maybeLogFirstSwapAction } from 'uniswap/src/features/transactions/swap/
 import {
   getTokenAddressFromChainForTradingApi,
   toTradingApiSupportedChainId,
+  tradingApiToUniverseChainId,
 } from 'uniswap/src/features/transactions/swap/utils/tradingApi'
 import { CurrencyField } from 'uniswap/src/types/currency'
 import { areAddressesEqual } from 'uniswap/src/utils/addresses'
@@ -228,7 +229,17 @@ function hasMatchingBridgeToken({
   tokenAddress: Address
   tokenChainId: ChainId
 }): boolean {
-  return !!bridgePairs.tokens.find(
-    (token) => areAddressesEqual(token.address, tokenAddress) && token.chainId === tokenChainId,
-  )
+  const tokenUniverseChainId = tradingApiToUniverseChainId(tokenChainId)
+  return !!bridgePairs.tokens.find((token) => {
+    const bridgeTokenUniverseChainId = tradingApiToUniverseChainId(token.chainId)
+    return (
+      tokenUniverseChainId &&
+      bridgeTokenUniverseChainId &&
+      areAddressesEqual({
+        addressInput1: { address: token.address, chainId: bridgeTokenUniverseChainId },
+        addressInput2: { address: tokenAddress, chainId: tokenUniverseChainId },
+      }) &&
+      tokenUniverseChainId === bridgeTokenUniverseChainId
+    )
+  })
 }

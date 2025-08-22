@@ -11,8 +11,8 @@ import { NotificationToastWrapper } from 'src/app/features/notifications/Notific
 import { StorageWarningModal } from 'src/app/features/warnings/StorageWarningModal'
 import { useIsWalletUnlocked } from 'src/app/hooks/useIsWalletUnlocked'
 import { HideContentsWhenSidebarBecomesInactive } from 'src/app/navigation/HideContentsWhenSidebarBecomesInactive'
-import { SideBarNavigationProvider } from 'src/app/navigation/SideBarNavigationProvider'
 import { AppRoutes } from 'src/app/navigation/constants'
+import { SidebarNavigationProvider } from 'src/app/navigation/providers'
 import { useRouterState } from 'src/app/navigation/state'
 import { focusOrCreateOnboardingTab } from 'src/app/navigation/utils'
 import { isOnboardedSelector } from 'src/app/utils/isOnboardedSelector'
@@ -21,6 +21,8 @@ import { TestnetModeBanner } from 'uniswap/src/components/banners/TestnetModeBan
 import { useIsChromeWindowFocusedWithTimeout } from 'uniswap/src/extension/useIsChromeWindowFocused'
 import { useEvent, usePrevious } from 'utilities/src/react/hooks'
 import { ONE_SECOND_MS } from 'utilities/src/time/time'
+import { useHeartbeatReporter } from 'wallet/src/features/telemetry/useHeartbeatReporter'
+import { useLastBalancesReporter } from 'wallet/src/features/telemetry/useLastBalancesReporter'
 import { TransactionHistoryUpdater } from 'wallet/src/features/transactions/TransactionHistoryUpdater'
 import { WalletUniswapProvider } from 'wallet/src/features/transactions/contexts/WalletUniswapContext'
 import { QueuedOrderModal } from 'wallet/src/features/transactions/swap/modals/QueuedOrderModal'
@@ -36,10 +38,23 @@ export function MainContent(): JSX.Element {
 
   return (
     <>
+      <BackgroundServices />
       <StorageWarningModal isOnboarding={false} />
       <HomeScreen />
     </>
   )
+}
+
+/**
+ * Background side effects that run in the background and are not part of the main app.
+ * A separate component is used to avoid unnecessary re-rendering of the main app when
+ * these services are running.
+ */
+function BackgroundServices(): JSX.Element {
+  const isOnboarded = useSelector(isOnboardedSelector)
+  useHeartbeatReporter({ isOnboarded })
+  useLastBalancesReporter({ isOnboarded })
+  return <></>
 }
 
 enum Direction {
@@ -131,7 +146,7 @@ export function WebNavigation(): JSX.Element {
   }, [isLoggedIn, pathname, towards])
 
   return (
-    <SideBarNavigationProvider>
+    <SidebarNavigationProvider>
       <NativeWalletProvider>
         <WalletUniswapProvider>
           <NotificationToastWrapper />
@@ -140,7 +155,7 @@ export function WebNavigation(): JSX.Element {
           {isLoggedIn && <ForceUpgradeModal />}
         </WalletUniswapProvider>
       </NativeWalletProvider>
-    </SideBarNavigationProvider>
+    </SidebarNavigationProvider>
   )
 }
 
@@ -160,6 +175,7 @@ const AnimatedPane = styled(Flex, {
   x: 0,
   opacity: 1,
   maxWidth: 'calc(min(535px, 100vw))',
+  minWidth: 319,
   minHeight: '100vh',
   mx: 'auto',
   width: '100%',

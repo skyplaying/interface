@@ -7,6 +7,8 @@ import { getStatsigClient } from 'uniswap/src/features/gating/sdk/statsig'
 import { pushNotification } from 'uniswap/src/features/notifications/slice'
 import { AppNotificationType } from 'uniswap/src/features/notifications/types'
 import { SwapTradeBaseProperties } from 'uniswap/src/features/telemetry/types'
+import { FLASHBLOCKS_UI_SKIP_ROUTES } from 'uniswap/src/features/transactions/swap/components/UnichainInstantBalanceModal/constants'
+import { getIsFlashblocksEnabled } from 'uniswap/src/features/transactions/swap/hooks/useIsUnichainFlashblocksEnabled'
 import { PermitMethod, ValidatedSwapTxContext } from 'uniswap/src/features/transactions/swap/types/swapTxAndGasInfo'
 import { isUniswapX } from 'uniswap/src/features/transactions/swap/utils/routing'
 import { tradeToTransactionInfo } from 'uniswap/src/features/transactions/swap/utils/trade'
@@ -104,7 +106,7 @@ export function* approveAndSwap(params: SwapParams) {
       }
 
       // TODO(WEB-4406) - Refactor the approval submission's rpc call latency to not delay wrap submission
-      approveTxHash = (yield* call(executeTransaction, executeTransactionParams)).transactionResponse.hash
+      approveTxHash = (yield* call(executeTransaction, executeTransactionParams)).transactionHash
       nonce = nonce ? nonce + 1 : undefined
 
       yield* call(handleTransactionSpacing, { shouldWait, hash: approveTxHash, onFailure })
@@ -135,7 +137,7 @@ export function* approveAndSwap(params: SwapParams) {
         transactionOriginType: TransactionOriginType.Internal,
       }
 
-      const permitTxHash = (yield* call(executeTransaction, executeTransactionParams)).transactionResponse.hash
+      const permitTxHash = (yield* call(executeTransaction, executeTransactionParams)).transactionHash
       nonce = nonce ? nonce + 1 : undefined
 
       yield* call(handleTransactionSpacing, { shouldWait, hash: permitTxHash, onFailure })
@@ -212,7 +214,11 @@ export function* approveAndSwap(params: SwapParams) {
         transactionOriginType: TransactionOriginType.Internal,
       }
       yield* call(executeTransaction, executeTransactionParams)
-      yield* put(pushNotification({ type: AppNotificationType.SwapPending, wrapType: WrapType.NotApplicable }))
+
+      // Only show pending notification if not a flashblock transaction
+      if (!getIsFlashblocksEnabled(chainId) || FLASHBLOCKS_UI_SKIP_ROUTES.includes(swapTxContext.routing)) {
+        yield* put(pushNotification({ type: AppNotificationType.SwapPending, wrapType: WrapType.NotApplicable }))
+      }
 
       // Call onSuccess now if it wasn't called earlier in function due to transaction spacing
       if (swapTxHasDelayedSubmission) {

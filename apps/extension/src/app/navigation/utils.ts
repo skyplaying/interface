@@ -5,9 +5,10 @@ import { onboardingMessageChannel } from 'src/background/messagePassing/messageC
 import { OnboardingMessageType } from 'src/background/messagePassing/types/ExtensionMessages'
 import { uniswapUrls } from 'uniswap/src/constants/urls'
 import { TransactionState } from 'uniswap/src/features/transactions/types/transactionState'
+import { getTokenUrl } from 'uniswap/src/utils/linking'
 import { logger } from 'utilities/src/logger/logger'
 import { escapeRegExp } from 'utilities/src/primitives/string'
-import { getTokenUrl } from 'wallet/src/utils/linking'
+import { useEvent } from 'utilities/src/react/hooks'
 
 export type SidebarLocationState =
   | {
@@ -20,8 +21,10 @@ export const useExtensionNavigation = (): {
   navigateBack: () => void
   locationState: SidebarLocationState
 } => {
-  const navigateTo = (path: To): void => navigate(path)
-  const navigateBack = (): void => navigate(-1)
+  const navigateTo = useEvent((path: To): void => navigate(path))
+  const navigateBack = useEvent((): void => {
+    navigate(-1)
+  })
   const locationState = useLocation().state as SidebarLocationState
 
   return { navigateTo, navigateBack, locationState }

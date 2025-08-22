@@ -1,6 +1,9 @@
+import { cloudflare } from '@cloudflare/vite-plugin'
 import { tamaguiPlugin } from '@tamagui/vite-plugin'
 import react from '@vitejs/plugin-react'
+import reactOxc from '@vitejs/plugin-react-oxc'
 import { execSync } from 'child_process'
+import fs from 'fs'
 import path from 'path'
 import process from 'process'
 import { fileURLToPath } from 'url'
@@ -19,6 +22,16 @@ const ENABLE_REACT_COMPILER = process.env.ENABLE_REACT_COMPILER === 'true'
 const ReactCompilerConfig = {
   target: '18', // '17' | '18' | '19'
 }
+const DEPLOY_TARGET = process.env.DEPLOY_TARGET || 'cloudflare'
+
+const reactPlugin = () =>
+  ENABLE_REACT_COMPILER
+    ? react({
+        babel: {
+          plugins: [['babel-plugin-react-compiler', ReactCompilerConfig]],
+        },
+      })
+    : reactOxc()
 
 // Get git commit hash
 const commitHash = execSync('git rev-parse HEAD').toString().trim()
@@ -86,15 +99,7 @@ export default defineConfig(({ mode }) => {
     },
 
     plugins: [
-      react(
-        ENABLE_REACT_COMPILER
-          ? {
-              babel: {
-                plugins: [['babel-plugin-react-compiler', ReactCompilerConfig]],
-              },
-            }
-          : undefined,
-      ),
+      reactPlugin(),
       isProduction
         ? tamaguiPlugin({
             config: '../../packages/ui/src/tamagui.config.ts',
@@ -169,9 +174,44 @@ export default defineConfig(({ mode }) => {
               { name: '**/*', limit: Infinity, mode: 'uncompressed' },
             ],
           }),
+      {
+        name: 'copy-twit-config',
+        writeBundle() {
+          const configMode = isProduction ? 'production' : 'staging'
+          const sourceFile = path.resolve(__dirname, `twit-configs/twit.${configMode}.json`)
+          const targetFile = path.resolve(__dirname, `build/.well-known/twit.json`)
+
+          if (fs.existsSync(sourceFile)) {
+            // Ensure the .well-known directory exists in build output
+            const targetDir = path.dirname(targetFile)
+            if (!fs.existsSync(targetDir)) {
+              fs.mkdirSync(targetDir, { recursive: true })
+            }
+
+            // Copy the file directly to the build output
+            fs.copyFileSync(sourceFile, targetFile)
+            console.log(`Copied ${configMode} TWIT config to build output for env ${mode}`)
+          } else {
+            console.warn(`${configMode} TWIT config not found for env ${mode}`)
+          }
+        },
+      },
+      DEPLOY_TARGET === 'cloudflare'
+        ? cloudflare({
+            configPath: './wrangler-vite-worker.jsonc',
+            // Workaround for cloudflare plugin bug: explicitly set environment name based on CLOUDFLARE_ENV
+            viteEnvironment:
+              process.env.CLOUDFLARE_ENV === 'production'
+                ? { name: 'app' }
+                : process.env.CLOUDFLARE_ENV === 'staging'
+                  ? { name: 'app_staging' }
+                  : undefined,
+          })
+        : undefined,
     ].filter(Boolean as unknown as <T>(x: T) => x is NonNullable<T>),
 
     optimizeDeps: {
+      entries: ['index.html'],
       include: [
         'graphql',
         'expo-linear-gradient',
@@ -191,6 +231,7 @@ export default defineConfig(({ mode }) => {
         '@uniswap/permit2-sdk',
         'jsbi',
         'ethers',
+        '@visx/responsive',
       ],
       // Libraries that shouldn't be pre-bundled
       exclude: ['expo-clipboard'],
@@ -202,6 +243,10 @@ export default defineConfig(({ mode }) => {
           '.tsx': 'tsx',
         },
       },
+    },
+
+    server: {
+      port: 3000,
     },
 
     build: {

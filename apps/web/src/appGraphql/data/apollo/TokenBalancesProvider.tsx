@@ -1,3 +1,4 @@
+import { useQueryClient } from '@tanstack/react-query'
 import { AdaptiveTokenBalancesProvider } from 'appGraphql/data/apollo/AdaptiveTokenBalancesProvider'
 import { apolloClient } from 'appGraphql/data/apollo/client'
 import { usePendingActivity } from 'components/AccountDrawer/MiniPortfolio/Activity/hooks'
@@ -8,7 +9,7 @@ import { usePendingTransactions } from 'state/transactions/hooks'
 import { usePortfolioBalancesLazyQuery } from 'uniswap/src/data/graphql/uniswap-data-api/__generated__/types-and-hooks'
 import { useEnabledChains } from 'uniswap/src/features/chains/hooks/useEnabledChains'
 // eslint-disable-next-line @typescript-eslint/no-restricted-imports
-import { usePortfolioValueModifiers } from 'uniswap/src/features/dataApi/balances'
+import { usePortfolioValueModifiers } from 'uniswap/src/features/dataApi/balances/balances'
 import { usePrevious } from 'utilities/src/react/hooks'
 
 function useHasAccountUpdate() {
@@ -36,6 +37,7 @@ function TokenBalancesProviderInternal({ children }: PropsWithChildren) {
   const [lazyFetch, query] = usePortfolioBalancesLazyQuery({ errorPolicy: 'all' })
   const account = useAccount()
   const hasAccountUpdate = useHasAccountUpdate()
+  const queryClient = useQueryClient()
 
   const valueModifiers = usePortfolioValueModifiers(account.address)
   const prevValueModifiers = usePrevious(valueModifiers)
@@ -63,8 +65,9 @@ function TokenBalancesProviderInternal({ children }: PropsWithChildren) {
       chainId: account.chainId,
       pendingDiff,
       apolloClient,
+      queryClient,
     })
-  }, [pendingDiff, account.address, account.chainId, watchTransactions])
+  }, [pendingDiff, account.address, account.chainId, watchTransactions, queryClient])
 
   const fetch = useCallback(() => {
     if (!account.address) {

@@ -9,6 +9,7 @@ import { UniverseChainId } from 'uniswap/src/features/chains/types'
 import { toSupportedChainId } from 'uniswap/src/features/chains/utils'
 import { FiatCurrency } from 'uniswap/src/features/fiatCurrency/constants'
 import { Language } from 'uniswap/src/features/language/constants'
+import { getNFTAssetKey } from 'uniswap/src/features/nfts/utils'
 import { ModalName } from 'uniswap/src/features/telemetry/constants'
 import { TransactionsState } from 'uniswap/src/features/transactions/slice'
 import {
@@ -21,7 +22,6 @@ import {
   unchecksumDismissedTokenWarningKeys,
 } from 'uniswap/src/state/uniswapMigrations'
 import { DappRequestType } from 'uniswap/src/types/walletConnect'
-import { getNFTAssetKey } from 'wallet/src/features/nfts/utils'
 import { Account } from 'wallet/src/features/wallet/accounts/types'
 import { SwapProtectionSetting } from 'wallet/src/features/wallet/slice'
 import {
@@ -43,6 +43,7 @@ import {
   moveTokenAndNFTVisibility,
   moveUserSettings,
   removeCreatedOnboardingRedesignAccountBehaviorHistory,
+  removePriceAlertsEnabledFromPushNotifications,
   removeUniconV2BehaviorState,
   removeWalletIsUnlockedState,
   updateExploreOrderByType,
@@ -1065,6 +1066,8 @@ export const migrations = {
   89: removeThaiBahtFromFiatCurrency,
 
   90: migrateLiquidityTransactionInfo,
+
+  91: removePriceAlertsEnabledFromPushNotifications,
 }
 
-export const MOBILE_STATE_VERSION = 90
+export const MOBILE_STATE_VERSION = 91

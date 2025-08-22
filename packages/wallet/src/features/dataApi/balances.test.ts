@@ -19,7 +19,7 @@ import {
   usePortfolioValueModifiers,
   useSortedPortfolioBalances,
   useTokenBalancesGroupedByVisibility,
-} from 'uniswap/src/features/dataApi/balances'
+} from 'uniswap/src/features/dataApi/balances/balances'
 import { PortfolioBalance } from 'uniswap/src/features/dataApi/types'
 import { UserSettingsState, initialUserSettingsState } from 'uniswap/src/features/settings/slice'
 import { CurrencyIdToVisibility, VisibilityState, initialVisibilityState } from 'uniswap/src/features/visibility/slice'
@@ -687,6 +687,8 @@ describe(usePortfolioCacheUpdater, () => {
       // Doesn't include feature flagged chains
       featureFlaggedChainIds: filterChainIdsByFeatureFlag({
         [UniverseChainId.Soneium]: false,
+        // Solana isn't supported by portfolio cache updater.
+        [UniverseChainId.Solana]: false,
       }),
     })
 

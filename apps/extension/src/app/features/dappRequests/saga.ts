@@ -1,10 +1,10 @@
 /* eslint-disable max-lines */
-import { Provider, TransactionResponse } from '@ethersproject/providers'
+import { Provider } from '@ethersproject/providers'
 import { providerErrors, rpcErrors, serializeError } from '@metamask/rpc-errors'
 import { createSearchParams } from 'react-router'
 import { changeChain } from 'src/app/features/dapp/changeChain'
 import { DappInfo, dappStore } from 'src/app/features/dapp/store'
-import { getActiveConnectedAccount } from 'src/app/features/dapp/utils'
+import { getActiveSignerConnectedAccount } from 'src/app/features/dapp/utils'
 import {
   addRequest,
   confirmRequest,
@@ -49,6 +49,7 @@ import { FeatureFlags } from 'uniswap/src/features/gating/flags'
 import { getFeatureFlag } from 'uniswap/src/features/gating/hooks'
 import { pushNotification } from 'uniswap/src/features/notifications/slice'
 import { AppNotificationType } from 'uniswap/src/features/notifications/types'
+import { Platform } from 'uniswap/src/features/platforms/types/Platform'
 import { getEnabledChainIdsSaga } from 'uniswap/src/features/settings/saga'
 import {
   TransactionOriginType,
@@ -63,8 +64,9 @@ import { generateBatchId, getCapabilitiesCore } from 'wallet/src/features/batche
 import { Call } from 'wallet/src/features/dappRequests/types'
 import {
   ExecuteTransactionParams,
-  executeTransaction,
-} from 'wallet/src/features/transactions/executeTransaction/executeTransactionSaga'
+  executeTransactionV2,
+} from 'wallet/src/features/transactions/executeTransaction/executeTransactionSagaV2'
+import { SignedTransactionRequest } from 'wallet/src/features/transactions/executeTransaction/types'
 import { getProvider, getSignerManager } from 'wallet/src/features/wallet/context'
 import { selectActiveAccount, selectHasSmartWalletConsent } from 'wallet/src/features/wallet/selectors'
 import { signMessage, signTypedDataMessage } from 'wallet/src/features/wallet/signing/signing'
@@ -319,15 +321,17 @@ export function* handleSendTransaction({
   senderTabInfo: { id },
   dappInfo,
   transactionTypeInfo,
+  preSignedTransaction,
 }: {
   request: BaseSendTransactionRequest
   senderTabInfo: SenderTabInfo
   dappInfo: DappInfo
   transactionTypeInfo?: TransactionTypeInfo
+  preSignedTransaction?: SignedTransactionRequest
 }) {
   const transactionRequest = request.transaction
   const { lastChainId, activeConnectedAddress, connectedAccounts } = dappInfo
-  const account = getActiveConnectedAccount(connectedAccounts, activeConnectedAddress)
+  const account = getActiveSignerConnectedAccount(connectedAccounts, activeConnectedAddress)
   const chainId = toSupportedChainId(request.transaction.chainId)
   if (request.transaction.chainId && chainId) {
     if (lastChainId !== chainId) {
@@ -350,9 +354,10 @@ export function* handleSendTransaction({
       },
     },
     transactionOriginType: TransactionOriginType.External,
+    preSignedTransaction,
   }
 
-  const { transactionResponse } = yield* call(executeTransaction, sendTransactionParams)
+  const { transactionHash } = yield* call(executeTransactionV2, sendTransactionParams)
 
   // Trigger a pending transaction notification after we send the transaction to chain
   yield* put(
@@ -364,20 +369,20 @@ export function* handleSendTransaction({
 
   // do not block on this function call since it should happen in parallel
   // eslint-disable-next-line @typescript-eslint/no-floating-promises
-  onTransactionSentToChain(transactionResponse, provider)
+  onTransactionSentToChain(transactionHash, provider)
 
   const response: SendTransactionResponse = {
     type: DappResponseType.SendTransactionResponse,
-    transactionResponse,
+    transactionHash,
     requestId: request.requestId,
   }
   yield* call(dappResponseMessageChannel.sendMessageToTab, id, response)
 }
 
 // TODO(EXT-976): Fix chrome notifications to work when the sidepanel is asleep.
-async function onTransactionSentToChain(transactionResponse: TransactionResponse, provider: Provider): Promise<void> {
+async function onTransactionSentToChain(transactionHash: string, provider: Provider): Promise<void> {
   // Listen for transaction receipt
-  const receipt = await provider.waitForTransaction(transactionResponse.hash, 1)
+  const receipt = await provider.waitForTransaction(transactionHash, 1)
 
   if (receipt.status === 100) {
     // Send chrome notification that transaction was successful
@@ -385,7 +390,7 @@ async function onTransactionSentToChain(transactionResponse: TransactionResponse
       type: 'basic',
       iconUrl: '',
       title: 'Transaction successful',
-      message: `Transaction ${transactionResponse.hash} was successful`,
+      message: `Transaction ${transactionHash} was successful`,
     })
   }
 }
@@ -416,7 +421,7 @@ export function* handleSignMessage({
 }) {
   const { requestId, messageHex } = request
   const { connectedAccounts, activeConnectedAddress } = dappInfo
-  const currentAccount = getActiveConnectedAccount(connectedAccounts, activeConnectedAddress)
+  const currentAccount = getActiveSignerConnectedAccount(connectedAccounts, activeConnectedAddress)
 
   const signerManager = yield* call(getSignerManager)
   const provider = yield* call(getProvider, dappInfo.lastChainId)
@@ -459,7 +464,7 @@ export function* handleSignTypedData({
       throw new Error(`Mismatched chainId - expected active chain: ${lastChainId}, received: ${chainId}`)
     }
 
-    const currentAccount = getActiveConnectedAccount(connectedAccounts, activeConnectedAddress)
+    const currentAccount = getActiveSignerConnectedAccount(connectedAccounts, activeConnectedAddress)
     const signerManager = yield* call(getSignerManager)
     const provider = yield* call(getProvider, lastChainId)
 
@@ -522,7 +527,7 @@ export function* handleUniswapOpenSidebarRequest(request: UniswapOpenSidebarRequ
  * This method returns the capabilities supported by the wallet for specific chains
  */
 export function* handleGetCapabilities(request: GetCapabilitiesRequest, senderTabInfo: SenderTabInfo) {
-  const { chains: enabledChains } = yield* call(getEnabledChainIdsSaga)
+  const { chains: enabledChains } = yield* call(getEnabledChainIdsSaga, Platform.EVM)
   const hasSmartWalletConsent = yield* select(selectHasSmartWalletConsent, request.address)
   const chainIds = request.chainIds?.map(hexadecimalStringToInt) ?? enabledChains.map((chain) => chain.valueOf())
 
@@ -573,16 +578,7 @@ export function* handleSendCalls({
       return
     }
 
-    const activeAccount = yield* select(selectActiveAccount)
-    if (!activeAccount) {
-      const errorResponse: ErrorResponse = {
-        type: DappResponseType.ErrorResponse,
-        error: serializeError(rpcErrors.internal('No active account found')),
-        requestId: request.requestId,
-      }
-      yield* call(dappResponseMessageChannel.sendMessageToTab, id, errorResponse)
-      return
-    }
+    const activeAccount = getActiveSignerConnectedAccount(dappInfo.connectedAccounts, dappInfo.activeConnectedAddress)
 
     // Generate or use provided batch ID
     const batchId = request.id || generateBatchId()
@@ -607,12 +603,12 @@ export function* handleSendCalls({
       transactionOriginType: TransactionOriginType.External,
     }
 
-    const { transactionResponse } = yield* call(executeTransaction, sendTransactionParams)
+    const { transactionHash } = yield* call(executeTransactionV2, sendTransactionParams)
 
     yield* put(
       addBatchedTransaction({
         batchId,
-        txHashes: [transactionResponse.hash], // Assuming single tx for now, might need update if batching changes
+        txHashes: [transactionHash], // Assuming single tx for now, might need update if batching changes
         requestId: encodedRequestId,
         chainId,
       }),

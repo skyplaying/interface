@@ -2,7 +2,8 @@ import { useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Button, Flex, Separator, Text, TouchableArea } from 'ui/src'
 import { GlobeFilled, InfoCircle, RotatableChevron } from 'ui/src/components/icons'
-import { iconSizes, zIndexes } from 'ui/src/theme'
+import { iconSizes, spacing, zIndexes } from 'ui/src/theme'
+import { DisplayNameText } from 'uniswap/src/components/accounts/DisplayNameText'
 import { Modal } from 'uniswap/src/components/modals/Modal'
 import { WarningInfo } from 'uniswap/src/components/modals/WarningModal/WarningInfo'
 import { WarningSeverity } from 'uniswap/src/components/modals/WarningModal/types'
@@ -13,7 +14,6 @@ import { useAvatar } from 'uniswap/src/features/address/avatar'
 import { ModalName } from 'uniswap/src/features/telemetry/constants'
 import { isMobileApp, isWeb } from 'utilities/src/platform'
 import { useBooleanState } from 'utilities/src/react/useBooleanState'
-import { DisplayNameText } from 'wallet/src/components/accounts/DisplayNameText'
 import { ActiveNetworkExpando } from 'wallet/src/features/smartWallet/ActiveNetworkExpando/ActiveNetworkExpando'
 import { useEnabledActiveNetworkDelegations } from 'wallet/src/features/smartWallet/hooks/useEnabledActiveNetworkDelegations'
 import { useTranslateSmartWalletStatus } from 'wallet/src/features/smartWallet/hooks/useTranslateSmartWalletStatus'
@@ -135,7 +135,12 @@ export function SmartWalletDisableModal({
           )}
         </Flex>
 
-        <ActiveNetworkExpando isOpen={isActiveNetworksExpanded} activeDelegations={activeDelegations} />
+        <ActiveNetworkExpando
+          isOpen={isActiveNetworksExpanded}
+          activeDelegations={activeDelegations}
+          // cancel out gap when collapsed to avoid extra space
+          mt={isActiveNetworksExpanded ? undefined : -spacing.spacing16}
+        />
 
         <Flex row justifyContent="space-between" mb="$spacing8">
           <Text variant="body3" color="$neutral2">
